@@ -6,6 +6,7 @@ import { Notice } from '../../components/ui/Notice'
 import { SelectField } from '../../components/ui/SelectField'
 import { Surface } from '../../components/ui/Surface'
 import { useAuth } from '../auth/AuthProvider'
+import { DenseTrainingPanel } from '../training/DenseTrainingPanel'
 import { getProject } from '../../services/projects'
 import { supabase } from '../../lib/supabase'
 import { prepareDataset } from '../../ml/preprocessing/prepare.ts'
@@ -122,8 +123,9 @@ export function LocalDatasetPage() {
             ['Características', prepared.manifest.featureNames.length],
           ].map(([label, value]) => <div key={label} className="rounded-xl bg-[var(--surface-muted)] p-4"><p className="text-xs text-[var(--muted)]">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>)}
         </div>
-        <Notice>La partición y las transformaciones se calcularon localmente. Este incremento todavía no guarda metadatos ni entrena redes: no se mostrarán resultados simulados.</Notice>
+        <Notice>Partición y transformaciones calculadas localmente. Puedes configurar y entrenar una Feedforward Dense debajo sin subir el CSV.</Notice>
       </Surface>}
+      {prepared && <DenseTrainingPanel dataset={prepared} projectId={projectId} userId={userId}/>}
     </div>
   )
 }

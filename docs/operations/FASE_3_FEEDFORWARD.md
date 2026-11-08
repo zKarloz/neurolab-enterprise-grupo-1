@@ -1,56 +1,73 @@
-# Fase 3 — Feedforward: documento de trabajo único
+# Fase 3 — Feedforward Dense (documentación consolidada)
 
-Estado: **En progreso. Incremento 1: CSV local y preparación reproducible.**
+**Estado:** en progreso. Incremento 1 (CSV y preprocesamiento) verificado visualmente por usuario Ingeniero; incremento 2 (entrenamiento real) implementado en código, **pendiente de `npm install`, typecheck, build, smoke test real y prueba en Vercel**. Fase 2 validada y cerrada.
 
-Fuente de diseño: `docs/architecture/FASE_0_DISENO_APROBADO.md`. La Fase 3 se completará únicamente cuando exista entrenamiento real Feedforward Dense, validación de Worker/backend, configuración de arquitectura y persistencia autorizada de metadatos/ejecuciones. **Aún no se cumplen esos criterios.**
+**Base aprobada:** `docs/architecture/FASE_0_DISENO_APROBADO.md`. No existe backend Python, cola de servidor ni importación de CSV completos a Supabase. El Administrador global no hereda el rol Ingeniero.
 
-## 1. Incremento 1: componentes implementados
+## 1. Incremento 1 — CSV local y preparación reproducible
 
-- Nueva ruta privada `/proyectos/:projectId/datos`. La pantalla solo permite entrar al Ingeniero de un proyecto activo, consultando su rol **real** en `project_members`. Ni el Administrador global ni el Responsable heredarán ese permiso sin una asignación de Ingeniero.
-- Lectura de archivo local con `PapaParse 5.7.0`, comprobando extensión `.csv`, límite **10 MiB**, máximo **50 000 filas** y de **2 a 100 columnas** (el máximo de columnas es provisional).
-- Cabeceras no vacías/únicas, columnas consistentes y errores de análisis visibles. No se sube ni guarda el CSV en Supabase.
-- Preprocesamiento local tipado e independiente de React:
-  - clasificación binaria con división estratificada y regresión con división aleatoria;
-  - semilla determinista 42, partición aproximada 70/15/15 (redondeada por clase cuando es binaria);
-  - identificación de tipos de predictores **solo con train**, estandarización o normalización ajustadas **solo con train**;
-  - imputación numérica de valores vacíos con media de train; representación categórica one-hot, canal para categorías no vistas;
-  - límite provisional de 40 categorías por variable y 128 características codificadas; presupuesto mínimo estimado del tensor de características de 64 MiB;
-  - almacenamiento local del manifiesto en memoria, para reutilizarlo más adelante en inferencia.
-- Interfaz: selector de objetivo y problema, resumen de características y tamaños reales de partición. No aparecen métricas ficticias.
+- Ruta `/proyectos/:projectId/datos`, accesible solo a miembros Ingeniero de un proyecto activo.
+- CSV con PapaParse `5.7.0`, cabecera obligatoria y límites de 10 MiB y 50 000 filas; errores de lectura visibles.
+- Problemas admitidos: binaria/regresión; objetivo y columnas numéricas/categóricas.
+- Partición con semilla 42: 70/15/15 (aproximada); binaria estratificada cuando es viable.
+- Transformadores ajustados **solo con train**, categoría desconocida reservada y manifest en memoria.
+- Límite provisional de 128 características codificadas, 40 categorías por predictor y estimación mínima de tensor de 64 MiB; puede requerirse reducir estos límites según RAM real.
+- No se suben filas de CSV a Supabase.
+- Pruebas automáticas `npm run test:preprocessing` (9 verificaciones); el usuario ya comprobó la pantalla con cuenta Ingeniero.
 
-## 2. Ejecución local
+## 2. Incremento 2 — Constructor y entrenamiento TensorFlow.js
 
-Desde la raíz del proyecto, en Git Bash:
+- `@tensorflow/tfjs` **4.22.0** fijado exactamente, sin rangos, y modelos Feedforward secuenciales `Dense` únicamente.
+- Constructor: 1–3 capas ocultas, 1–64 neuronas por capa, activaciones `relu`, `tanh`, `sigmoid`; salida 1 neurona sigmoide y `binaryCrossentropy` para binaria, lineal y `meanSquaredError` para regresión. Optimizador Adam.
+- Límites iniciales: 1–50 épocas, batch entre 1 y 128 sin superar train, learning rate entre 0.00001 y 0.1, máximo 100 000 parámetros y semilla entera para inicializadores.
+- **Backend verificado por entrenamiento real de prueba**, primero WebGL si está disponible y luego CPU. Dentro del Worker solo se intenta WebGL si existe `OffscreenCanvas`; la capacidad efectiva se comprueba ejecutando `fit()` con gradientes. Se omite WASM hasta demostrar soporte de las operaciones de entrenamiento necesarias. Registrar backend, contexto (Worker/hilo principal) y versión TF.js.
+- Worker de módulo empaquetado por Vite con `new Worker(new URL(..., import.meta.url), { type: 'module' })`. Si falla **antes de iniciar** se usa hilo principal; si falla durante ejecución se muestra error, sin reiniciar automáticamente.
+- Progreso por `onEpochEnd`: pérdidas reales de train/validation y exactitud o MAE cuando TensorFlow.js las comunica. Barra de progreso, número de época, estado y cancelación cooperativa. Una petición de cancelación no se muestra como confirmada hasta recibir evento terminal del motor.
+- Liberación explícita de tensors, modelo, optimizador y Worker al finalizar/cancelar/abandonar pantalla; en el fallback del hilo principal la detención se ejecuta en el siguiente punto cooperativo.
+- El conjunto **test no participa** en el entrenamiento. La evaluación, predicción e historial se incorporan en F4. No se muestran métricas sintéticas.
+- El modelo se libera después de entrenar y **no se guarda** todavía. Los resultados solo se conservan en memoria de la pestaña. Una nueva sesión requiere repetir el CSV.
+
+## 3. Aplicar sobre el repositorio existente
+
+Descomprime el ZIP del **Incremento 2** en la raíz de `neurolab-enterprise-grupo-1`, después de tener el Incremento 1 aplicado. Conserva `.env.local`, `.env.test.local`, `package-lock.json`, `.git` y cualquier configuración propia.
+
+Ejecuta desde Git Bash en VSCode:
 
 ```bash
 npm install
 npm run typecheck
 npm run build
-npm run test:structure
+npm run test:preprocessing
+npm run test:network
+npm run test:training:runtime
 npm run test:projects
 npm run test:design
-npm run test:preprocessing
 npm run dev
 ```
 
-Al probar desde la web, incorpora una cuenta de **Ingeniero** a un proyecto que exista, inicia sesión con esa cuenta, abre **Proyectos → Proyecto → Preparar CSV** y prueba los CSV en `tests/fixtures/`. La cuenta Administrador/Responsable **no** mostrará esta acción a menos que tenga rol Ingeniero en ese proyecto; al existir un solo rol por proyecto, usa una cuenta aparte de Ingeniero para esta comprobación.
+**El smoke test `test:training:runtime` efectúa dos épocas REALES de clasificación con TensorFlow.js CPU**, no una simulación. Puede tardar más que las pruebas estructurales. La instalación debe actualizar el lockfile con la versión exacta.
 
-No se debe ejecutar ninguna migración nueva de Supabase para este incremento. El archivo `package-lock.json` se genera/actualiza con `npm install` **en tu repositorio local** y se incluye en el commit. No sobrescribas `.env.local` ni tu identidad Git.
+En navegador, inicia sesión como Ingeniero: **Proyectos → proyecto → Dataset local → CSV**. Prueba los archivos `tests/fixtures/feedforward_binaria_demo.csv` y `feedforward_regresion_demo.csv`, haz clic en «Validar y preparar» y configura las capas. Pulsa «Iniciar entrenamiento» y verifica que las pérdidas cambian con valores reales, la pestaña sigue respondiendo y la cancelación es confirmada. La GPU puede no estar disponible y CPU es un resultado correcto. Abandonar la ruta interrumpe el entrenamiento, no lo deja ejecutando en el servidor.
 
-## 3. Pruebas de Incremento 1
+Después de superar pruebas y build:
 
-`npm run test:preprocessing` usa Node 22 con `--experimental-strip-types` (sin añadir un runner). Prueba separación reproducible sin solapamientos, ausencia de fuga en la estandarización, vocabulario de entrenamiento, valores desconocidos, clasificación estratificada, errores del objetivo, esquema y límites de categorías. Se requiere `npm run typecheck` y `npm run build` en el equipo con dependencias instaladas antes de desplegar.
+```bash
+git add .
+git commit -m "feat(fase3): entrenamiento Feedforward Dense con TensorFlow.js"
+git push origin main
+```
 
-Los límites de características, categorías y memoria son presupuestos iniciales sujetos a pruebas empíricas en navegadores y equipos objetivos. El tamaño de fichero no garantiza memoria suficiente.
+**Git:** utiliza tu identidad configurada en VSCode (`git config user.email`). No usar el correo provisional `dev@neurolab.local`, no hacer `push --force` ni subir credenciales.
 
-## 4. Próximos incrementos de la misma fase
+## 4. Riesgos pendientes y condición de cierre
 
-1. Arquitecturas Feedforward Dense y validación de configuración.
-2. Entrenamiento real TensorFlow.js `4.22.0`, callbacks `onEpochEnd`, cancelación, Worker + backend compatible o fallback probado; registro del backend realmente usado.
-3. Migración específica de F3 para `architectures`, `datasets` (solo metadatos), `training_runs` y métricas iniciales con RLS estricta y pruebas cruzadas de pertenencia/rol; persistencia confirmada.
+- **Compatibilidad:** hay que validar la compilación Vite/React/TF.js en el entorno con npm y la ejecución real en Vercel, al menos en un navegador escritorio.
+- **Memoria:** la copia de datos al Worker puede duplicar el uso transitorio de RAM; las características one-hot pueden aumentarlo más. Evitar CSV grandes hasta probar límites reales.
+- **Cancelación:** la detención es cooperativa por época; WebGL puede tardar en ceder el hilo del Worker.
+- **RLS:** no sustituir autorización con ocultar botones; las operaciones persistentes de F3 requerirán políticas y pruebas cruzadas.
+- **Confiabilidad:** las métricas calculadas localmente no son prueba criptográfica de ejecución sin manipulación.
+- **Persistencia pendiente del siguiente incremento de F3:** migraciones de `architectures`, `datasets` (metadatos solamente), `training_runs` y `training_metrics` iniciales con RLS estricta; confirmar escrituras antes de indicar que fueron guardadas.
+- **F4:** gráficas con Recharts, evaluación final sobre test, inferencia e historial de métricas.
+- **F5:** modelos privados versionados e inmutables en Storage.
 
-No crear todavía versiones de modelos ni reportes, que corresponden a F5/F6. Una vez terminada toda la fase, consolidar su documentación en **este único Markdown**.
-
-## 5. Condición de cierre de Fase 2 aún pendiente
-
-Antes de declarar F2 cerrada, ejecutar la prueba real de dos cuentas documentada en `docs/operations/FASE_2_PROYECTOS.md` y `npm run test:fase2:live`, utilizando un `.env.test.local` excluido de Git. El despliegue y las pruebas estructurales, por sí solos, no demuestran el aislamiento RLS.
+No se declara cerrada F3 hasta completar migraciones/RLS, pruebas, entrenamiento real en el navegador y despliegue.

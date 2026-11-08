@@ -90,3 +90,7 @@ npm run build
 ```
 
 No hay migración adicional para este incremento ni se sube el CSV. El entrenamiento real y la persistencia de metadatos/ejecuciones llegarán en los próximos incrementos de la misma Fase 3.
+
+## Fase 3 · Incremento 2 — Entrenamiento Dense
+
+Con un proyecto activo y rol **Ingeniero**, abre Proyectos → Detalle → Dataset local, prepara un CSV y utiliza el constructor Feedforward Dense al final de la pantalla. TF.js se entrena en el navegador; no hay API Python ni datos simulados. Ejecuta `npm install`, `npm run typecheck`, `npm run build`, `npm run test:network` y `npm run test:training:runtime` antes del despliegue. La documentación se mantiene en `docs/operations/FASE_3_FEEDFORWARD.md`.

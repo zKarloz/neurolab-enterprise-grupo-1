@@ -69,3 +69,14 @@ La Fase 2 se cierra solo cuando esas comprobaciones se documenten como satisfact
 - Tema claro: lavanda y celeste pastel sobre base clara. Oscuro: base neutral con acentos morados/celestes apagados.
 - Tarjeta «Punto de partida» gris neutral en tema oscuro.
 - **Documentación:** al cerrar cada fase consolidar instrucciones, cambios, pruebas y decisiones en **un documento Markdown por fase**; no acumular guías Markdown fragmentadas. Las migraciones SQL y los archivos de pruebas siguen separados, pues son artefactos ejecutables.
+
+## 5. Cierre funcional confirmado (7 noviembre 2026)
+
+**Estado actualizado: CERRADA funcionalmente.** El equipo confirmó que la aplicación desplegada en Vercel permite iniciar sesión con un Lector sin concederle edición de nombre ni descripción del proyecto. Ejecutó además `npm run test:fase2:live` con dos cuentas y obtuvo:
+
+```text
+OK: aislamiento, permisos de lectura, RPC de membresías y revocación inmediatos.
+Proyecto de prueba archivado.
+```
+
+Con ello se verifican las restricciones de RLS y RPC de la Fase 2 en Supabase real. Se mantiene la regla de que un Administrador global no hereda permisos técnicos dentro de todos los proyectos. No se requieren nuevas migraciones de Fase 2. Este archivo es el **documento consolidado de la fase**; las migraciones y scripts de prueba permanecen como artefactos ejecutables.
