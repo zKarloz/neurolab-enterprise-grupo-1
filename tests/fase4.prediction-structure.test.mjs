@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 const core = readFileSync('src/ml/training/trainCore.ts', 'utf8')
+const contracts = readFileSync('src/ml/training/types.ts', 'utf8')
 const session = readFileSync('src/ml/training/browserSession.ts', 'utf8')
 const worker = readFileSync('src/workers/training.worker.ts', 'utf8')
 const panel = readFileSync('src/features/training/DenseTrainingPanel.tsx', 'utf8')
@@ -37,4 +38,14 @@ test('el sondeo del backend libera sus recursos sin usar el estado de inferencia
   assert.doesNotMatch(probe, /retainedForPrediction/)
   assert.match(probe, /model\?\.dispose\(\)/)
   assert.match(probe, /optimizer\?\.dispose\(\)/)
+})
+
+// Regresión: la inferencia del modelo requiere el contrato exportado por types.ts.
+// Sin este contrato, TypeScript puede reportar TS2305 y tipos implícitos en trainCore.ts.
+test('contrato de inferencia tipado y exportado para Worker, sesión y entrenamiento', () => {
+  assert.match(contracts, /export interface DensePredictor\s*\{/)
+  assert.match(contracts, /predict:\s*\(features:\s*number\[\]\)\s*=>\s*Promise<number>/)
+  assert.match(contracts, /dispose:\s*\(\)\s*=>\s*void/)
+  assert.match(core, /import type \{[^}]*DensePredictor[^}]*\} from '\.\/types\.ts'/)
+  assert.match(core, /predict:\s*async \(values:\s*number\[\]\):\s*Promise<number>/)
 })

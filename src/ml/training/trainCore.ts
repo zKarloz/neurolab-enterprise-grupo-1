@@ -178,9 +178,9 @@ export async function trainDenseModel(
         const trainedOptimizer: tf.Optimizer = optimizer
         let disposed = false
         onReady({
-          predict: async (values) => {
+          predict: async (values: number[]): Promise<number> => {
             if (disposed) throw new Error('El modelo local ya fue liberado.')
-            if (values.length !== features || values.some((value) => !Number.isFinite(value))) {
+            if (values.length !== features || values.some((value: number) => !Number.isFinite(value))) {
               throw new Error('La entrada de predicción tiene dimensiones o valores inválidos.')
             }
             // tidy libera la entrada, pero conserva la salida hasta leer data().
@@ -191,8 +191,8 @@ export async function trainDenseModel(
               return prediction
             })
             try {
-              const values = await output.data()
-              const result = Number(values[0])
+              const outputValues = await output.data()
+              const result = Number(outputValues[0])
               if (!Number.isFinite(result)) throw new Error('La red devolvió una predicción no finita.')
               return result
             } finally { output.dispose() }

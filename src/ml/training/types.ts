@@ -22,6 +22,12 @@ export interface TrainingSummary {
   final: EpochMetrics
   parameters: number
 }
+/** El modelo entrenado existe solo en memoria, nunca en PostgreSQL hasta Fase 5. */
+export interface DensePredictor {
+  predict: (features: number[]) => Promise<number>
+  dispose: () => void
+}
+
 export type TrainingEvent =
   | { type: 'initializing'; context: RuntimeContext }
   | { type: 'backend'; backend: BackendName; context: RuntimeContext; tfjsVersion: string }
@@ -30,6 +36,9 @@ export type TrainingEvent =
   | { type: 'completed'; summary: TrainingSummary }
   | { type: 'cancelled'; epochsCompleted: number }
   | { type: 'error'; message: string }
+  | { type: 'prediction'; requestId: number; value: number }
+  | { type: 'prediction-error'; requestId: number; message: string }
 export type TrainingWorkerCommand =
   | { type: 'start'; dataset: PreparedDataset; config: DenseTrainConfig }
   | { type: 'cancel' }
+  | { type: 'predict'; requestId: number; features: number[] }
