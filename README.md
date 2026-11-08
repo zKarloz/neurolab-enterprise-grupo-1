@@ -118,3 +118,7 @@ npm run test:training:runtime
 ```
 
 La guía y las evidencias se mantienen en un único archivo: `docs/operations/FASE_4_EVALUACION_HISTORIAL.md`. La carga de modelos tras cerrar la pestaña se implementará en Fase 5.
+
+## Fase 5 — Modelos privados (incremento 1)
+
+Ejecutar `npm run test:fase5`, `npm run test:fase5:runtime`, `npm run typecheck` y `npm run build`; después aplicar la migración `202611080005_private_models.sql` en Supabase y probar `npm run test:fase5:live`. Manual y criterios en **`docs/operations/FASE_5_MODELOS.md`**. No incluir `.env.local` ni `.env.test.local` en Git.

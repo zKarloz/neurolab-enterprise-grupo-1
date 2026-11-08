@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Cpu, Layers3, Plus, Square, Trash2 } from 'lucide-react'
+import { Cpu, Layers3, Plus, Save, Square, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Notice } from '../../components/ui/Notice'
@@ -21,6 +21,7 @@ import { getProject } from '../../services/projects'
 import { createPersistedRun, finalizeRun, recordBackend, recordEpoch } from '../../services/trainingPersistence.ts'
 import type { FinalRunStatus } from '../../services/trainingPersistence.ts'
 import { TrainingMetricsChart } from './TrainingMetricsChart.tsx'
+import { saveModelVersion } from '../../services/modelRegistry.ts'
 
 interface DenseTrainingPanelProps {
   dataset: PreparedDataset
@@ -61,11 +62,15 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
   const [runId, setRunId] = useState('')
   const [syncState, setSyncState] = useState<'idle' | 'pending' | 'confirmed' | 'error'>('idle')
   const [syncError, setSyncError] = useState('')
+  const [modelName, setModelName] = useState('Feedforward Dense')
+  const [modelSaveBusy, setModelSaveBusy] = useState(false)
+  const [modelSaveError, setModelSaveError] = useState('')
+  const [savedVersion, setSavedVersion] = useState('')
   const session = useRef<TrainingSession | null>(null)
   const persistence = useRef<RunPersistenceStream | null>(null)
   const cancelledBeforeStart = useRef(false)
   const trainingActive = ['starting', 'running', 'stopping'].includes(status)
-  const active = trainingActive || (syncState === 'pending' && ['completed', 'cancelled', 'failed'].includes(status))
+  const active = trainingActive || modelSaveBusy || (syncState === 'pending' && ['completed', 'cancelled', 'failed'].includes(status))
   const features = dataset.manifest.featureNames.length
 
   const configurationCheck = useMemo(() => {
@@ -160,6 +165,8 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
   async function start() {
     if (active || !configurationCheck.valid) return
     setError('')
+    setSavedVersion('')
+    setModelSaveError('')
     setBackend('')
     setEpochs([])
     setSummary(null)
@@ -205,6 +212,21 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
       setError(cause instanceof Error ? cause.message : 'No se pudo iniciar el entrenamiento.')
       if (stream) queueFinish(stream, 'failed', undefined, 'Error al inicializar el entrenamiento local')
     }
+  }
+
+  /** Guardado explícito: no publicar mientras falten épocas/evaluación confirmadas. */
+  async function saveCurrentModel() {
+    if (!session.current || !runId || status !== 'completed' || syncState !== 'confirmed' ||
+        !evaluationConfirmed || modelSaveBusy || savedVersion) return
+    setModelSaveBusy(true)
+    setModelSaveError('')
+    try {
+      const bundle = await session.current.exportArtifacts()
+      const version = await saveModelVersion(runId, modelName, bundle)
+      setSavedVersion(`Versión ${version.version} · ${version.id.slice(0, 8)}`)
+    } catch (cause) {
+      setModelSaveError(cause instanceof Error ? cause.message : 'No se pudo publicar la versión.')
+    } finally { setModelSaveBusy(false) }
   }
 
   function cancel() {
@@ -272,13 +294,24 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
           return session.current.predict(values)
         }}
       />}
+      {status === 'completed' && summary && <div className="space-y-4 rounded-xl border border-[var(--line)] p-4">
+        <div className="flex items-center gap-2"><Save size={18} aria-hidden="true"/><h3 className="font-semibold">Guardar versión de modelo · Fase 5</h3></div>
+        <p className="text-sm text-[var(--muted)]">Exporta los pesos reales de esta sesión a Storage privado. Solo un Ingeniero autorizado puede publicar versiones nuevas. No se sube el CSV.</p>
+        <InputField id="registered-model-name" label="Nombre del modelo" value={modelName} disabled={modelSaveBusy || !!savedVersion}
+          maxLength={120} onChange={(event) => setModelName(event.target.value)}/>
+        {savedVersion ? <Notice tone="success">Modelo registrado y confirmado: {savedVersion}. Disponible en Modelos del proyecto.</Notice> :
+          <Button type="button" busy={modelSaveBusy} disabled={syncState !== 'confirmed' || !evaluationConfirmed || !modelName.trim() || modelSaveBusy}
+            onClick={() => void saveCurrentModel()}><Save size={16}/> Guardar versión inmutable</Button>}
+        {syncState !== 'confirmed' && <p className="text-xs text-[var(--muted)]">Espera la confirmación final de Supabase antes de publicar.</p>}
+        {modelSaveError && <Notice tone="error">{modelSaveError} Si hubo una carga parcial, los archivos pendientes solo podrán ser tratados administrativamente.</Notice>}
+      </div>}
       {runId && <div className="space-y-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-4" aria-live="polite">
         <p className="text-sm font-semibold">Persistencia en Supabase</p>
         <p className="text-sm">{savedEpochs} / {config.epochs} épocas confirmadas · {syncState === 'confirmed' ? 'Estado final confirmado' : syncState === 'error' ? 'Guardado parcial o fallido' : 'Sincronizando escrituras'}</p>
         <p className="break-all text-xs text-[var(--muted)]">Ejecución: {runId}</p>
         {syncError && <Notice tone="error">{syncError} Las métricas locales pueden diferir de las confirmadas. No cierres la pestaña hasta revisar el problema.</Notice>}
       </div>}
-      <Notice>El CSV permanece local y no se guardan pesos del modelo. Los datos de preparación, la configuración, el backend y cada época confirmada se conservan en Supabase. Si se pierde la red, solo cuentan como guardados los datos confirmados. La evaluación de prueba y el historial se conservan en Supabase. Puedes predecir mientras esta pantalla permanezca abierta; los pesos solo se podrán recuperar después de cerrar sesión cuando implementemos la Fase 5.</Notice>
+      <Notice>El CSV permanece local. Los pesos solo se guardan al publicar una versión expresamente. Los datos de preparación, la configuración, el backend y cada época confirmada se conservan en Supabase. Si se pierde la red, solo cuentan como guardados los datos confirmados. La evaluación de prueba y el historial se conservan en Supabase. Puedes predecir mientras esta pantalla permanezca abierta; las versiones publicadas se recuperan en Modelos incluso tras cerrar sesión.</Notice>
     </Surface>
   )
 }

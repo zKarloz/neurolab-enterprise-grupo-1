@@ -23,7 +23,10 @@
     "test:persistence": "node --experimental-strip-types --test tests/persistence.test.mjs",
     "test:evaluation": "node --experimental-strip-types --test tests/evaluation.test.mjs tests/history.test.mjs tests/fase4.structure.test.mjs",
     "test:fase4:prediction": "node --experimental-strip-types --test tests/fase4.prediction-comparison.test.mjs tests/fase4.prediction-structure.test.mjs",
-    "test:fase4:live": "node --experimental-strip-types --env-file=.env.test.local scripts/test-fase4-live.mjs"
+    "test:fase4:live": "node --experimental-strip-types --env-file=.env.test.local scripts/test-fase4-live.mjs",
+    "test:fase5": "node --experimental-strip-types --test tests/fase5.manifest.test.mjs tests/fase5.security.test.mjs",
+    "test:fase5:runtime": "node --experimental-strip-types --test tests/fase5.runtime.test.mjs",
+    "test:fase5:live": "node --env-file=.env.test.local scripts/test-fase5-live.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

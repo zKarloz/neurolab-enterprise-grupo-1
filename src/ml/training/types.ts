@@ -1,6 +1,7 @@
 import type { DenseTrainConfig } from '../networks/config.ts'
 import type { PreparedDataset } from '../preprocessing/types.ts'
 import type { TestEvaluation } from '../evaluation/metrics.ts'
+import type { ModelArtifactBundle } from '../models/artifacts.ts'
 
 /** Contrato estructurado entre React y el Web Worker; se transportan solamente datos locales. */
 export type RuntimeContext = 'worker' | 'main'
@@ -26,6 +27,7 @@ export interface TrainingSummary {
 export interface DensePredictor {
   predict: (features: number[]) => Promise<number>
   dispose: () => void
+  exportArtifacts: () => Promise<ModelArtifactBundle>
 }
 
 export type TrainingEvent =
@@ -38,7 +40,10 @@ export type TrainingEvent =
   | { type: 'error'; message: string }
   | { type: 'prediction'; requestId: number; value: number }
   | { type: 'prediction-error'; requestId: number; message: string }
+  | { type: 'artifacts'; requestId: number; bundle: ModelArtifactBundle }
+  | { type: 'artifacts-error'; requestId: number; message: string }
 export type TrainingWorkerCommand =
   | { type: 'start'; dataset: PreparedDataset; config: DenseTrainConfig }
   | { type: 'cancel' }
   | { type: 'predict'; requestId: number; features: number[] }
+  | { type: 'export'; requestId: number }

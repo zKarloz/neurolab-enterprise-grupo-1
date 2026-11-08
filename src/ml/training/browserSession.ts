@@ -1,3 +1,4 @@
+import type { ModelArtifactBundle } from '../models/artifacts.ts'
 import type { DenseTrainConfig } from '../networks/config.ts'
 import type { PreparedDataset } from '../preprocessing/types.ts'
 import type { DensePredictor, TrainingEvent, TrainingWorkerCommand } from './types.ts'
@@ -5,6 +6,7 @@ import type { DensePredictor, TrainingEvent, TrainingWorkerCommand } from './typ
 export interface TrainingSession {
   cancel: () => void
   predict: (features: number[]) => Promise<number>
+  exportArtifacts: () => Promise<ModelArtifactBundle>
   dispose: () => void
 }
 
@@ -23,15 +25,27 @@ export function startBrowserTraining(
   let successful = false
   let mainFallbackStarted = false
   let nextRequestId = 0
+  const pendingExports = new Map<number, { resolve: (value: ModelArtifactBundle) => void; reject: (reason: Error) => void }>()
   const pending = new Map<number, { resolve: (value: number) => void; reject: (reason: Error) => void }>()
 
   function rejectPending(reason: string) {
     for (const request of pending.values()) request.reject(new Error(reason))
     pending.clear()
+    for (const request of pendingExports.values()) request.reject(new Error(reason))
+    pendingExports.clear()
   }
 
   function emit(event: TrainingEvent) {
     if (disposed) return
+    if (event.type === 'artifacts' || event.type === 'artifacts-error') {
+      const request = pendingExports.get(event.requestId)
+      if (request) {
+        pendingExports.delete(event.requestId)
+        if (event.type === 'artifacts') request.resolve(event.bundle)
+        else request.reject(new Error(event.message))
+      }
+      return
+    }
     if (event.type === 'prediction' || event.type === 'prediction-error') {
       const request = pending.get(event.requestId)
       if (request) {
@@ -128,6 +142,22 @@ export function startBrowserTraining(
         catch (cause) {
           pending.delete(requestId)
           reject(cause instanceof Error ? cause : new Error('No se pudo enviar la predicción al Worker.'))
+        }
+      })
+    },
+    exportArtifacts: async () => {
+      if (disposed || !successful) throw new Error('El entrenamiento debe finalizar antes de guardar el modelo.')
+      if (!worker) {
+        if (!mainPredictor) throw new Error('El modelo local ya no está disponible.')
+        return mainPredictor.exportArtifacts()
+      }
+      return new Promise<ModelArtifactBundle>((resolve, reject) => {
+        const requestId = ++nextRequestId
+        pendingExports.set(requestId, { resolve, reject })
+        try { worker!.postMessage({ type: 'export', requestId } satisfies TrainingWorkerCommand) }
+        catch (cause) {
+          pendingExports.delete(requestId)
+          reject(cause instanceof Error ? cause : new Error('No se pudo exportar desde el Worker.'))
         }
       })
     },

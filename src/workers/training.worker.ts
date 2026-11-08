@@ -35,6 +35,18 @@ self.onmessage = (message: MessageEvent<TrainingWorkerCommand>) => {
         } satisfies TrainingEvent))
       return
     }
+    case 'export': {
+      const { requestId } = command
+      if (!predictor || running) {
+        self.postMessage({ type: 'artifacts-error', requestId, message: 'No hay modelo completo disponible.' } satisfies TrainingEvent)
+        return
+      }
+      void predictor.exportArtifacts()
+        .then((bundle) => self.postMessage({ type: 'artifacts', requestId, bundle } satisfies TrainingEvent))
+        .catch((cause: unknown) => self.postMessage({ type: 'artifacts-error', requestId,
+          message: cause instanceof Error ? cause.message : 'No se pudo exportar el modelo.' } satisfies TrainingEvent))
+      return
+    }
     case 'start': {
       if (running) return
       // El modelo anterior se libera antes de iniciar un entrenamiento nuevo.
