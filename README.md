@@ -77,3 +77,16 @@ npm run build           # Requiere npm install
 5. Documentar evidencia y confirmar cierre de Fase 2 antes de iniciar Feedforward (F3).
 
 **Sin claves administrativas ni archivos CSV originales en el frontend.**
+
+## Incremento 1 de Fase 3 — Preparación local de CSV
+
+La preparación de datos se abre únicamente desde el detalle de un proyecto **activo** para el usuario con rol **Ingeniero/analista de IA**. Consulta `docs/operations/FASE_3_FEEDFORWARD.md` para instrucciones, límites y pruebas.
+
+```bash
+npm install
+npm run test:preprocessing
+npm run typecheck
+npm run build
+```
+
+No hay migración adicional para este incremento ni se sube el CSV. El entrenamiento real y la persistencia de metadatos/ejecuciones llegarán en los próximos incrementos de la misma Fase 3.

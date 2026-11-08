@@ -6,6 +6,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { HomePage } from '../features/home/HomePage'
 import { ProjectsPage } from '../features/projects/ProjectsPage'
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
+import { LocalDatasetPage } from '../features/datasets/LocalDatasetPage'
 import { PageState } from '../components/ui/PageState'
 
 function PrivateRoute() {
@@ -37,6 +38,7 @@ export function App() {
           <Route path="/cuenta" element={<AccountPage />} />
           <Route path="/proyectos" element={<ProjectsPage />} />
           <Route path="/proyectos/:projectId" element={<ProjectDetailPage />} />
+          <Route path="/proyectos/:projectId/datos" element={<LocalDatasetPage />} />
           <Route path="/" element={<Navigate to="/inicio" replace />} />
         </Route>
       </Route>
