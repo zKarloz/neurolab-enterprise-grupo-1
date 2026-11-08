@@ -32,3 +32,17 @@ test('Existe migración RLS e infraestructura mínima de rutas', () => {
   assert.ok(existsSync(join(root,'src/app/App.tsx')))
   assert.ok(existsSync(join(root,'vercel.json')))
 })
+
+
+test('El cliente solo acepta clave pública actual y el bootstrap no es una migración', () => {
+  const client = read('src/lib/supabase.ts')
+  const env = read('.env.example')
+  const bootstrap = read('supabase/bootstrap/01_first_platform_admin.sql')
+  assert.match(client, /VITE_SUPABASE_PUBLISHABLE_KEY/)
+  assert.match(client, /sb_publishable_/)
+  assert.doesNotMatch(env, /sb_secret_\w{12,}/)
+  assert.match(bootstrap, /Ya existe al menos un Administrador global/)
+  assert.match(bootstrap, /where id = v_user_id/)
+  assert.match(bootstrap, /email_confirmed_at/)
+  assert.ok(!existsSync(join(root, 'supabase/migrations/01_first_platform_admin.sql')))
+})

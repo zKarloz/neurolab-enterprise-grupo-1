@@ -19,7 +19,7 @@ export function PageState({ kind, onRetry, onSignOut }: PageStateProps) {
   const details = {
     loading: { icon: LoaderCircle, title: 'Verificando acceso', description: 'Validando sesión y permisos en Supabase…' },
     blocked: { icon: LockKeyhole, title: 'Acceso no autorizado', description: 'Tu cuenta no tiene un perfil activo. Contacta al administrador si necesitas acceso.' },
-    config: { icon: Settings2, title: 'Configura Supabase', description: 'Faltan las variables públicas VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY. Consulta el README para habilitar el acceso.' },
+    config: { icon: Settings2, title: 'Configura Supabase', description: 'Faltan las variables públicas VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY. Consulta el README para habilitar el acceso.' },
     error: { icon: WifiOff, title: 'Servicio no disponible', description: 'No se pudo verificar la sesión o los permisos. Comprueba la conexión y vuelve a intentar.' },
   }[kind]
   const Icon = details.icon

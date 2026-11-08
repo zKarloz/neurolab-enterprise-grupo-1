@@ -1,64 +1,108 @@
-# Fase 1 — Configuración segura y despliegue
+# Fase 1 — Alta inicial de Supabase y primer Administrador
 
-## 1. Requisitos previos
+> **Estado:** procedimiento preparado, ejecución remota pendiente. No equivale a una cuenta o proyecto ya creados.
+> **Seguridad aprobada:** el Administrador global no tiene acceso técnico automático a proyectos ajenos.
 
-- Node.js **22.12 o superior** (recomendado 22 LTS), npm y Git Bash.
-- Un proyecto **nuevo** de Supabase, sin datos ni migraciones de implementaciones anteriores.
-- Repositorio Git propio y cuenta de Vercel.
+## 1. Crear proyecto NUEVO
 
-## 2. Crear y configurar Supabase
+1. Inicia sesión en https://supabase.com/dashboard y selecciona **New project**.
+2. Asigna nombre `neurolab-enterprise` (o `neurolab-enterprise-dev` si prevés separar entornos), organización propia y plan **Free**.
+3. Selecciona una región cercana a los usuarios del proyecto; revisa la región real disponible antes de guardar.
+4. Genera una contraseña **larga y única de PostgreSQL** con gestor de contraseñas, guárdala fuera del repositorio y no la envíes por chat.
+5. Crea el proyecto y comprueba que está disponible. No reutilices una instancia con datos anteriores.
 
-1. Crear proyecto nuevo.
-2. En Authentication > Providers, habilitar únicamente **Email**. Deshabilitar OAuth y acceso anónimo.
-3. En Authentication > General Settings, deshabilitar **Allow new users to sign up**. No existe `signUp` en el código del frontend.
-4. Como no se configuró SMTP, el administrador creará usuarios desde **Authentication > Users**. Configurar confirmación de correo según el procedimiento administrativo (no enviar correos a destinatarios no autorizados).
-5. Ejecutar `supabase/migrations/202611070001_init_app_users.sql` una sola vez en SQL Editor con identidad privilegiada.
-6. Crear manualmente el primer usuario y verificar que existe su fila en `public.app_users`.
-7. Para designar al primer administrador, desde **SQL Editor y solo como operador privilegiado**, ejecutar la consulta siguiente, **reemplazando el UUID** por el ID Auth verificado:
+## 2. Auth — solo correo y contraseña
 
-   ```sql
-   -- Operación de bootstrap manual: NO colocar en migraciones automáticas.
-   update public.app_users
-      set is_platform_admin = true, updated_at = now()
-    where id = 'REEMPLAZAR_POR_UUID_DE_AUTH';
-   ```
+1. En **Authentication > Sign In / Providers**, conserva Email habilitado y deshabilita otros proveedores no requeridos.
+2. En **Authentication > Settings / General**, desactiva **Allow new users to sign up**.
+3. Desactiva **Allow anonymous sign-ins**.
+4. Mantén la verificación de correo para flujos que la requieran; para la cuenta inicial, usa el alta administrativa y **confirma el correo manualmente solo si has verificado su propiedad**. No dependas de SMTP sin configurar.
+5. En **Authentication > URL Configuration**, fija `http://localhost:5173` como Site URL durante el desarrollo y registra URLs de redirección necesarias. Tras desplegar, sustituye o agrega el dominio HTTPS de Vercel.
+6. Revisa en **Authentication > Users** que no existan cuentas inesperadas.
 
-8. Verificar visualmente el resultado desde SQL Editor. Ninguna cuenta puede ejecutar esta operación con la clave pública.
-9. Ejecutar los casos de `supabase/tests/rls_checklist.md` antes de dar por terminada la Fase 1.
+> Los nombres de menú pueden variar. Las referencias oficiales están en https://supabase.com/docs/guides/auth/general-configuration .
 
-**Nota:** `is_platform_admin` solo define gestión global futura; no concede lectura técnica de proyectos ajenos ni permisos para aprobar/entrenar modelos.
+## 3. Ejecutar migración inicial
 
-## 3. Configurar frontend en VSCode (terminal Git Bash)
+En **SQL Editor**, abre y ejecuta el contenido completo de:
+
+`supabase/migrations/202611070001_init_app_users.sql`
+
+La migración crea `public.app_users`, triggers desde `auth.users` y RLS **solo lectura del perfil propio activo**. No concede INSERT/UPDATE/DELETE al frontend. Aplica esta migración **una sola vez** en el nuevo proyecto, antes de crear usuarios.
+
+Verificación manual en SQL Editor:
+
+```sql
+select tablename, rowsecurity from pg_tables
+where schemaname = 'public' and tablename = 'app_users';
+
+select policyname, cmd, roles from pg_policies
+where schemaname = 'public' and tablename = 'app_users';
+```
+
+Resultado esperado: `rowsecurity = true` y una política SELECT limitada a `authenticated`.
+
+## 4. Crear primera cuenta y nombrar Administrador
+
+1. En **Authentication > Users**, elige **Add user > Create new user** si está disponible (evita **Send invitation**, que necesita correo saliente).
+2. Introduce correo real del operador y una contraseña temporal robusta creada mediante gestor. La contraseña **no** debe entrar en Git, archivos SQL ni chat.
+3. Confirma el correo de manera administrativa **solo tras verificar su propiedad** (opción `Auto Confirm User` si la pantalla la ofrece).
+4. Copia el UUID del nuevo usuario en Authentication > Users.
+5. En **Table Editor > public.app_users**, comprueba que el trigger creó su perfil con `status=active` e `is_platform_admin=false`.
+6. En **SQL Editor**, abre `supabase/bootstrap/01_first_platform_admin.sql`, sustituye **el UUID de ceros** por el UUID real y ejecútalo manualmente. No guardes el UUID real en Git.
+7. Verifica que su fila tiene `is_platform_admin=true`. El bootstrap falla intencionadamente si ya existe un administrador.
+8. Inicia sesión en la app, entra a **Mi cuenta**, confirma “Administrador global” y cambia la contraseña temporal.
+
+**No crear directamente filas en `auth.users` mediante SQL**: utilizar Dashboard o un mecanismo Admin autorizado.
+
+## 5. Conectar React (VSCode + Git Bash)
+
+En el directorio del repositorio:
 
 ```bash
 cp .env.example .env.local
-# Editar .env.local con valores REALES de Settings > API en Supabase.
+# Edita .env.local con el Project URL y la clave PUBLICABLE (sb_publishable_...).
 npm install
 npm run typecheck
 npm run build
 npm run dev
 ```
 
-La instalación debe generar `package-lock.json`; debe añadirse al repositorio una vez validado. No introducir `service_role` ni claves secretas en `VITE_*`.
+Obtén Project URL y publicable key desde el diálogo **Connect** o **Settings > API Keys** de Supabase.
 
-Solo `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` (clave pública anon/publishable) deben existir en Vercel. Su exposición al navegador es normal; **RLS** protege datos y privilegios.
+El archivo `.env.local` debe contener solo:
 
-## 4. Vercel
+```dotenv
+VITE_SUPABASE_URL=https://TU-PROYECTO.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_REEMPLAZAR
+```
 
-1. Subir el repositorio a GitHub mediante Git Bash (`git remote add origin ...`, `git push ...`).
-2. Importar en Vercel como proyecto Vite.
-3. Configurar las dos variables públicas en Project Settings > Environment Variables.
-4. Compilar con `npm run build`; salida `dist`.
-5. Verificar URL HTTPS pública, ruta directa `/acceder`, login autorizado, `/inicio` y `/cuenta`.
-6. Probar refresco de `/cuenta`, logout y acceso anónimo a rutas privadas.
-7. Probar que una cuenta `inactive` no accede aunque tenga sesión.
+La clave `sb_publishable_` sustituye a la clave `anon` antigua y conserva el alcance público limitado por RLS. **Nunca** incluyas `sb_secret_`, `service_role` ni una contraseña de PostgreSQL en `VITE_*`.
 
-No registrar el despliegue como completado sin URL comprobada y pruebas reales contra Supabase.
+## 6. Verificaciones antes de avanzar a Vercel
 
-## 5. Recuperación administrativa temporal
+- Acceso a `/acceder` con credenciales válidas; redirección a `/inicio`.
+- Pantalla `/cuenta` indica el perfil y el rol global correctos.
+- Usuario con contraseña incorrecta no accede.
+- Visitante anónimo y cuenta inactiva no ven recursos privados.
+- Desde el cliente público, nadie puede escribir `status` ni `is_platform_admin`.
+- Usuario A no puede leer perfil de B.
+- Cierre de sesión y cambio de contraseña funcionan.
 
-Sin SMTP propio, **no** se ofrece botón de recuperar contraseña. El administrador debe verificar la identidad por canal externo autorizado y restablecer la contraseña desde Dashboard, transmitiendo nuevas credenciales de forma segura. El usuario puede cambiar su contraseña desde `/cuenta` con una sesión válida.
+Guía de casos de RLS: `supabase/tests/rls_checklist.md`.
 
-## 6. Cuándo detenerse
+## 7. Despliegue Vercel — pendiente
 
-Detenerse únicamente ante decisiones de impacto arquitectónico o seguridad. No incorporar proyectos, redes, datasets, entrenamiento ni métricas ficticias durante F1.
+1. Publica el repositorio Git en GitHub cuando el build y pruebas locales pasen.
+2. Importa el repositorio en Vercel como proyecto Vite (salida: `dist`).
+3. Configura **solo** las dos variables públicas anteriores en Vercel.
+4. Añade la URL HTTPS de Vercel a las URLs autorizadas de Supabase Auth.
+5. Verifica recarga en `/cuenta`, login, logout y denegación de acceso a inactivos desde producción.
+
+Fase 1 **no se cierra** hasta tener URL desplegada y comprobar conexión Auth/PostgreSQL real.
+
+## 8. Recuperación administrativa provisional
+
+Hasta disponer de SMTP configurado, el administrador verifica la identidad del titular por un canal seguro y restablece la contraseña mediante la interfaz administrativa de Auth. No se habilita “Olvidé mi contraseña” que dependa de correos no configurados.
+
+Referencias: https://supabase.com/docs/guides/getting-started/api-keys ; https://supabase.com/docs/guides/auth/users ; https://supabase.com/docs/guides/auth/managing-user-data .

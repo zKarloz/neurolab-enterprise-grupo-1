@@ -28,7 +28,7 @@ npm run dev
 
 Abrir la dirección que informe Vite. **Node.js requerido:** 22.12 o superior (Vite 8 también admite 20.19+).
 
-La clave `VITE_SUPABASE_ANON_KEY` es pública (anon/publishable). **Nunca usar `service_role` o credenciales administrativas en frontend.** El archivo `.env.local` está ignorado por Git.
+La clave `VITE_SUPABASE_PUBLISHABLE_KEY` es pública (`sb_publishable_...`). **Nunca usar `sb_secret_`, `service_role` o credenciales administrativas en frontend.** El archivo `.env.local` está ignorado por Git.
 
 Para el paso a paso de Auth, SQL, RLS, primer administrador y Vercel ver [Guía de Fase 1](docs/operations/FASE_1_CONFIGURACION.md).
 

@@ -30,3 +30,10 @@
 - Repositorio remoto y despliegue a Vercel; comprobación pública de rutas y conexión.
 
 **No se han creado proyectos de IA, modelos, redes, CSV, datos de demostración ni métricas simuladas.**
+
+## Incremento siguiente — bootstrap Supabase preparado
+
+- Nombre de variable de frontend actualizado a `VITE_SUPABASE_PUBLISHABLE_KEY`.
+- Procedimiento de alta de primer administrador protegido y repetible **solo tras editar UUID**, fuera de migraciones automáticas.
+- Guía de alta inicial y checklist de pruebas.
+- Proyecto remoto, migración ejecutada y usuario real **todavía pendientes** de conectar Supabase.
