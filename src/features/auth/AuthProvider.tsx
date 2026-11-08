@@ -31,6 +31,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const { data: identity, error: identityError } = await supabase.auth.getUser()
       if (current !== sequence.current) return
       if (identityError) {
+        // Mostrar solo el estado y el tipo de error: nunca tokens ni credenciales.
+        console.warn('[NeuroLab/Auth] Verificación de identidad fallida', {
+          status: identityError.status, name: identityError.name,
+        })
         // Una sesión inválida se descarta, a diferencia de un fallo de red temporal.
         if (identityError.status === 401 || identityError.status === 403) setState({ status: 'guest' })
         else setState((previous) => verificationUnavailable(previous, 'No se pudo verificar la sesión.'))
@@ -47,6 +51,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         .maybeSingle()
       if (current !== sequence.current) return
       if (error) {
+        console.warn('[NeuroLab/Auth] Consulta de perfil fallida', {
+          code: error.code, status: error.details ? 'con_detalle' : 'sin_detalle',
+        })
         setState((previous) => verificationUnavailable(previous, 'No se pudo verificar tu perfil. Revisa la conexión.'))
         return
       }
@@ -56,7 +63,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return
       }
       setState({ status: 'ready', user: identity.user, profile: data as AppProfile })
-    } catch {
+    } catch (error) {
+      console.warn('[NeuroLab/Auth] Fallo inesperado', {
+        name: error instanceof Error ? error.name : 'UnknownError',
+      })
       if (current === sequence.current) {
         setState((previous) => verificationUnavailable(previous, 'No se pudo contactar el servicio de autenticación.'))
       }
@@ -65,20 +75,52 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!supabase) return
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // No realizar solicitudes asíncronas a Supabase desde el callback de Auth.
-      if (event === 'SIGNED_OUT') {
-        sequence.current += 1
-        setState({ status: 'guest' })
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (event === 'SIGNED_IN') setState((previous) => signInIdentityChanged(previous, session?.user.id))
-        queueMicrotask(() => void refresh())
-      }
-    })
-    void refresh()
+
+    let disposed = false
+    let unsubscribe: (() => void) | undefined
+    let verificationTimer: ReturnType<typeof setTimeout> | undefined
+
+    // Fuera del callback de Auth: la API puede mantener un bloqueo interno mientras
+    // notifica eventos. una microtarea no garantiza que ese bloqueo ya se haya liberado.
+    function scheduleRefresh() {
+      if (verificationTimer !== undefined) clearTimeout(verificationTimer)
+      verificationTimer = setTimeout(() => {
+        verificationTimer = undefined
+        if (!disposed) void refresh()
+      }, 0)
+    }
+
+    async function initializeAuth() {
+      // Primero resolver la inicialización de Auth; registrar el listener durante
+      // getUser() puede provocar una carrera de renovación del token en algunas versiones.
+      await refresh()
+      if (disposed) return
+
+      const { data: { subscription } } = supabase!.auth.onAuthStateChange((event, session) => {
+        // Callback SÍNCRONO: nunca llamar ni esperar aquí a la API de Supabase.
+        if (event === 'SIGNED_OUT') {
+          if (verificationTimer !== undefined) clearTimeout(verificationTimer)
+          verificationTimer = undefined
+          sequence.current += 1
+          setState({ status: 'guest' })
+          return
+        }
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          if (event === 'SIGNED_IN') {
+            setState((previous) => signInIdentityChanged(previous, session?.user.id))
+          }
+          scheduleRefresh()
+        }
+      })
+      unsubscribe = () => subscription.unsubscribe()
+    }
+
+    void initializeAuth()
     return () => {
+      disposed = true
       sequence.current += 1
-      subscription.unsubscribe()
+      if (verificationTimer !== undefined) clearTimeout(verificationTimer)
+      unsubscribe?.()
     }
   }, [refresh])
 
