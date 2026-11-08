@@ -122,3 +122,10 @@ La guía y las evidencias se mantienen en un único archivo: `docs/operations/FA
 ## Fase 5 — Modelos privados (incremento 1)
 
 Ejecutar `npm run test:fase5`, `npm run test:fase5:runtime`, `npm run typecheck` y `npm run build`; después aplicar la migración `202611080005_private_models.sql` en Supabase y probar `npm run test:fase5:live`. Manual y criterios en **`docs/operations/FASE_5_MODELOS.md`**. No incluir `.env.local` ni `.env.test.local` en Git.
+
+## Fase 6 — Administración de usuarios (incremento 1)
+
+- `/administracion/usuarios`: lista, alta y estado de cuentas, restablecimiento administrativo sin SMTP.
+- Se requiere **migración 006**, **despliegue de Supabase Edge Function `admin-users`** y pruebas reales antes de utilizar en producción.
+- `npm run test:fase6` prueba políticas/estructura; `npm run test:fase6:live` requiere dos cuentas en `.env.test.local`.
+- Proceso y reglas de seguridad: `docs/operations/FASE_6_COMPLEMENTOS.md`.

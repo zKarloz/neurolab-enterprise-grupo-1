@@ -10,6 +10,7 @@ import { LocalDatasetPage } from '../features/datasets/LocalDatasetPage'
 import { TrainingHistoryPage } from '../features/evaluation/TrainingHistoryPage'
 import { ModelRegistryPage } from '../features/models/ModelRegistryPage'
 import { PageState } from '../components/ui/PageState'
+import { AdminUsersPage } from '../features/administration/AdminUsersPage'
 
 function PrivateRoute() {
   const { state, refresh, signOut } = useAuth()
@@ -18,6 +19,13 @@ function PrivateRoute() {
   if (state.status === 'blocked') return <PageState kind="blocked" onRetry={() => void refresh()} onSignOut={signOut} />
   if (state.status === 'unavailable') return <PageState kind="error" onRetry={() => void refresh()} />
   if (state.status === 'guest') return <Navigate to="/acceder" replace />
+  return <Outlet />
+}
+
+// La ruta visual complementa, pero no sustituye, la autorización en Edge Function.
+function AdminRoute() {
+  const { state } = useAuth()
+  if (state.status !== 'ready' || !state.profile.is_platform_admin) return <Navigate to="/inicio" replace />
   return <Outlet />
 }
 
@@ -43,6 +51,9 @@ export function App() {
           <Route path="/proyectos/:projectId/datos" element={<LocalDatasetPage />} />
           <Route path="/proyectos/:projectId/historial" element={<TrainingHistoryPage />} />
           <Route path="/proyectos/:projectId/modelos" element={<ModelRegistryPage />} />
+          <Route element={<AdminRoute />}>
+            <Route path="/administracion/usuarios" element={<AdminUsersPage />} />
+          </Route>
           <Route path="/" element={<Navigate to="/inicio" replace />} />
         </Route>
       </Route>

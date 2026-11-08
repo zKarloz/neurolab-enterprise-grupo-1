@@ -1,6 +1,6 @@
 # NeuroLab Enterprise — Fase 5: modelos y versiones inmutables
 
-> **Estado:** Incremento 1 preparado; **fase abierta hasta validación real** de Supabase, Vercel y predicción tras volver a iniciar sesión.  
+> **Estado:** **CERRADA** — pruebas de Supabase y Vercel confirmadas por el equipo el 8 de noviembre de 2026.
 > **Base:** diseño aprobado de Fase 0, Fase 3 (entrenamiento real) y Fase 4 (evaluación y predicción).  
 > **Principio:** ninguna fila de CSV original se carga a Supabase. No se introduce entrenamiento remoto.
 
@@ -85,10 +85,18 @@ git push origin main
 
 **Funcionales:** se confirma la versión en Supabase antes del éxito visual; no se sube CSV; se puede descargar un modelo únicamente con membresía; la predicción funciona después de cerrar sesión y volver a entrar; las versiones son inmutables y no se sobrescriben; los recursos del modelo se liberan al salir de la pantalla.
 
-**Fase 5 no estará cerrada** hasta validar estos puntos con el Supabase y Vercel reales del proyecto.
+**Validación confirmada:** el equipo informó de la ejecución correcta de estos puntos en su Supabase y despliegue real de Vercel; por tanto, la Fase 5 se declara cerrada.
 
 ## 5. Referencia
 
 - Documento Maestro aprobado, M08 «Registro de modelos» y requisitos de seguridad (con adaptaciones Fase 0).
 - [Supabase Storage privado y RLS](https://supabase.com/docs/guides/storage/security/access-control).
 - [TensorFlow.js: guardar y cargar modelos](https://www.tensorflow.org/js/guide/save_load).
+
+---
+
+## 6. Cierre definitivo — 8 de noviembre de 2026
+
+**Estado: CERRADA.** El usuario confirmó pruebas locales, publicación en GitHub y despliegue operativo de Vercel con guardado de un modelo, recuperación desde Supabase Storage privado e inferencia tras volver a iniciar sesión. No es una verificación independiente de acceso al proyecto privado: se registra la evidencia reportada por el equipo.
+
+Se mantiene pendiente para Fase 6 el flujo de revisión/aprobación administrativa. Las versiones de Fase 5 ya publicadas permanecen inmutables para los roles normales de la aplicación.

@@ -1,0 +1,3 @@
+# La función es exclusivamente para usuarios con sesión. Nunca desactivar verify_jwt.
+[functions.admin-users]
+verify_jwt = true
