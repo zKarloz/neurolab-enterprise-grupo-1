@@ -80,7 +80,9 @@ export async function trainDenseModel(
   let optimizer: tf.Optimizer | null = null
   const tensors: tf.Tensor[] = []
   const startedAt = performance.now()
-  let final: EpochMetrics | null = null
+  // Los callbacks ocurren durante fit(); conservar sus métricas en una colección
+  // evita que TypeScript considere imposible la asignación desde onEpochEnd.
+  const completedEpochs: EpochMetrics[] = []
   try {
     model = tf.sequential()
     config.hiddenLayers.forEach((layer, index) => {
@@ -124,7 +126,7 @@ export async function trainDenseModel(
           const loss = metricValue(logs, ['loss'])
           const validationLoss = metricValue(logs, ['val_loss'])
           if (loss === null || validationLoss === null) throw new Error('TensorFlow.js no devolvió las pérdidas esperadas.')
-          final = {
+          const epochMetrics: EpochMetrics = {
             epoch: index + 1,
             totalEpochs: config.epochs,
             loss,
@@ -132,13 +134,16 @@ export async function trainDenseModel(
             metric: metricValue(logs, ['accuracy', 'acc', 'mae', 'meanAbsoluteError']),
             validationMetric: metricValue(logs, ['val_accuracy', 'val_acc', 'val_mae', 'val_meanAbsoluteError']),
           }
-          emit({ type: 'epoch', metrics: final })
+          completedEpochs.push(epochMetrics)
+          emit({ type: 'epoch', metrics: epochMetrics })
           // Ceder al event loop permite recibir la solicitud de cancelación desde la UI.
           await tf.nextFrame()
           if (cancelled() && model) model.stopTraining = true
         },
       },
     })
+    // .at(-1) devuelve EpochMetrics | undefined, incluso tras un callback asíncrono.
+    const final = completedEpochs.at(-1)
     if (cancelled()) {
       emit({ type: 'cancelled', epochsCompleted: final?.epoch ?? 0 })
     } else if (!final) {

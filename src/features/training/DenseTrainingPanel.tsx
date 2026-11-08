@@ -10,7 +10,8 @@ import { DEFAULT_DENSE_CONFIG, validateDenseConfig } from '../../ml/networks/con
 import type { DenseTrainConfig, HiddenActivation } from '../../ml/networks/config.ts'
 import type { PreparedDataset } from '../../ml/preprocessing/types.ts'
 import { startBrowserTraining } from '../../ml/training/browserSession.ts'
-import type { EpochMetrics, TrainingEvent, TrainingSession, TrainingSummary } from '../../ml/training/types.ts'
+import type { TrainingSession } from '../../ml/training/browserSession.ts'
+import type { EpochMetrics, TrainingEvent, TrainingSummary } from '../../ml/training/types.ts'
 import { getProject } from '../../services/projects'
 
 interface DenseTrainingPanelProps { dataset: PreparedDataset; projectId: string; userId: string }
