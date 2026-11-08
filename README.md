@@ -13,7 +13,7 @@
 - Cierre de sesión; cambio de contraseña mediante Supabase Auth.
 - Maquetado profesional responsive, menú móvil, componentes de interfaz y temas claro (predeterminado) / oscuro en escala de grises.
 - Pantallas de carga, configuración faltante, acceso bloqueado y error de conexión.
-- **Fase 2**: proyectos, integrantes y roles, con tablas PostgreSQL, RLS, funciones autorizadas y auditoría administrativa. No hay proyectos ficticios, entrenamiento ni resultados simulados.
+- **Fase 2**: proyectos, integrantes y roles con RLS y auditoría. **Fase 3**: preparación CSV, TensorFlow.js Dense y métricas persistidas. **Fase 4**: evaluación de prueba, historial, comparación y predicción local en sesión.
 
 ## Inicio rápido (VSCode + Git Bash)
 
@@ -57,7 +57,7 @@ supabase/
 - La tabla `app_users` incluye `is_platform_admin` protegido, `status=active|inactive` y FK a `auth.users`.
 - La UI solo reconoce como autenticado a quien supera la comprobación de identidad y el perfil activo. RLS es la frontera de seguridad, no los componentes React.
 - La creación de cuentas se realiza exclusivamente de manera administrativa desde Supabase Dashboard.
-- No se instalaron todavía TensorFlow.js, PapaParse ni Recharts: corresponden a F3/F4.
+- TensorFlow.js, PapaParse y Recharts se usan en F3/F4; las versiones exactas están fijadas en `package.json`.
 - Para reproducibilidad, los números de versión de dependencias son exactos, sin `^` ni `~`. El lockfile se generará mediante `npm install` en un entorno con acceso al registro; no se ha inventado.
 
 ## Comprobaciones disponibles
@@ -103,3 +103,18 @@ La migración `supabase/migrations/202611080003_feedforward_persistence.sql` agr
 ## Fase 4 — Evaluación e historial (incremento inicial)
 
 La Fase 3 quedó cerrada tras la validación del equipo. La Fase 4 añade evaluación final sobre test e historial accesible a integrantes desde `Proyectos → Historial`. Antes de desplegar, aplicar la nueva migración `supabase/migrations/202611080004_test_evaluation.sql`, ejecutar `npm run test:evaluation`, `npm run typecheck`, `npm run build` y probar ambos CSV. No se almacenan filas ni modelos hasta las fases correspondientes. Guía única: `docs/operations/FASE_4_EVALUACION_HISTORIAL.md`.
+
+
+## Fase 4 · Incremento 2 — Predicción y comparación
+
+Tras entrenar como **Ingeniero**, el formulario «Predicción local» utiliza los pesos aún en memoria y el preprocesamiento de train. En «Historial» se pueden seleccionar dos ejecuciones completadas del mismo tipo para comparar sus curvas y métricas de test confirmadas por Supabase. **No ejecutar SQL nuevo.**
+
+```bash
+npm run test:fase4:prediction
+npm run test:evaluation
+npm run typecheck
+npm run build
+npm run test:training:runtime
+```
+
+La guía y las evidencias se mantienen en un único archivo: `docs/operations/FASE_4_EVALUACION_HISTORIAL.md`. La carga de modelos tras cerrar la pestaña se implementará en Fase 5.

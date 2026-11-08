@@ -53,3 +53,24 @@ test('regresión: evalúa test después del entrenamiento y reporta métricas re
   assert.ok(Number.isFinite(evaluation.mse) && Number.isFinite(evaluation.rmse) && Number.isFinite(evaluation.mae))
   assert.equal(events.at(-1)?.type, 'completed')
 })
+
+
+test('inferencia en la sesión: usa pesos reales tras completar y se libera explícitamente', { timeout: 30000 }, async () => {
+  const table = {
+    columns: ['x', 'target'],
+    rows: Array.from({ length: 40 }, (_, i) => [String(i / 40), i < 20 ? '0' : '1']),
+  }
+  const prepared = prepareDataset(table, { targetColumn: 'target', problemType: 'binary', seed: 42 })
+  let ready = null
+  const events = []
+  await trainDenseModel(prepared, {
+    hiddenLayers: [{ units: 4, activation: 'relu' }], epochs: 2, batchSize: 8, learningRate: 0.01, seed: 42,
+  }, 'main', (event) => events.push(event), () => false, (predictor) => { ready = predictor })
+  assert.ok(ready)
+  assert.equal(events.at(-1).type, 'completed')
+  const value = await ready.predict(prepared.test.x[0])
+  assert.ok(Number.isFinite(value) && value >= 0 && value <= 1)
+  await assert.rejects(() => ready.predict([1, 2]), /dimensiones/)
+  ready.dispose()
+  await assert.rejects(() => ready.predict(prepared.test.x[0]), /liberado/)
+})

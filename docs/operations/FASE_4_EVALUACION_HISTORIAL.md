@@ -58,3 +58,40 @@ git push origin main
 - El historial conserva agregados, no los CSV ni el estado en memoria del modelo. Todavía no se puede reanudar una ejecución ni recuperar los pesos para inferencia después de cerrar la pestaña.
 - Si falla la RPC al guardar la evaluación, la UI indicará guardado parcial/fallido y no afirmará persistencia completa.
 - La app no envía predicciones individuales; solo estadísticas agregadas. Los proyectos con pocas muestras deben evitarse para datos sensibles, porque los agregados pueden revelar información.
+
+---
+
+## Incremento 2 — Inferencia en sesión y comparación de ejecuciones (8 de noviembre de 2026)
+
+**Estado:** parche preparado para validación en VSCode y Vercel; la Fase 4 permanece abierta hasta comprobarlo.
+
+### Alcance
+
+- **Predicción en sesión actual:** después de `model.fit()` y de evaluar test, se conserva temporalmente la red Dense en el Worker (o en el hilo principal, si se aplicó el respaldo). El usuario introduce valores originales en un formulario generado a partir de los transformadores del dataset; se aplica el **mismo manifiesto de preprocesamiento de train** y se ejecuta `model.predict()`. La clasificación muestra clase y probabilidad de la segunda etiqueta con umbral fijo 0,5; la regresión entrega el valor continuo en la escala original. No hay resultados de ejemplo ni se guardan entradas de inferencia.
+- **Gestión de memoria:** la red se libera al abandonar la pantalla o comenzar un nuevo entrenamiento. La pérdida de Worker invalida solicitudes pendientes, en vez de aparentar predicciones. El modelo no se conserva al recargar ni se sube a Supabase; la persistencia de pesos queda para la Fase 5.
+- **Comparación de ejecuciones:** en `/proyectos/:projectId/historial` se seleccionan **dos ejecuciones completadas del mismo problema**, incluso si están en páginas distintas del listado. Se muestran las métricas de test realmente confirmadas y se superponen las pérdidas de validación registradas por época, dejando huecos cuando falten valores. La consulta usa las RLS y tablas existentes.
+- La comparación es **descriptiva**, no un mecanismo automático de selección del mejor modelo. Si el dataset, particiones o semillas son diferentes, las métricas de test pueden no ser directamente comparables. El usuario no debe ajustar hiperparámetros con el conjunto de prueba.
+- **Sin SQL ni dependencias nuevas:** se reutilizan la migración 004, TensorFlow.js, Recharts y los componentes compartidos existentes.
+
+### Pruebas a ejecutar
+
+```bash
+npm install
+npm run test:fase4:prediction
+npm run test:evaluation
+npm run test:preprocessing
+npm run typecheck
+npm run build
+npm run test:training:runtime
+```
+
+### Validación manual obligatoria
+
+1. Como **Ingeniero**, importar uno de los CSV de prueba, preparar, entrenar hasta `COMPLETED` y observar la nueva tarjeta **Predicción local**. Introducir valores en las unidades originales, solicitar una predicción y verificar que el resultado cambia según las entradas. Repetir una predicción con clasificación y otra con regresión.
+2. Cambiar a otra pestaña y regresar: la predicción debe seguir disponible mientras la ruta esté montada. Salir de la pantalla y volver: **no** debe presentarse un modelo anterior como cargado; es necesario reentrenar (hasta F5).
+3. Probar cancelación: una ejecución cancelada **no** habilita predicción. El Worker se libera al abandonar la pantalla.
+4. Crear dos ejecuciones finalizadas del mismo tipo y abrir **Historial**. Seleccionarlas para comparar: tabla y líneas deben provenir únicamente de Supabase. Un run antiguo sin evaluación muestra ausencia de métricas test, nunca valores inventados.
+5. Con cuenta Lector/Revisor consultar las comparaciones autorizadas; con cuenta de otro proyecto o Admin global sin membresía no debe ser posible leer recursos técnicos.
+6. Confirmar `npm run build` y despliegue Vercel desde GitHub. Solo entonces registrar el cierre de la Fase 4.
+
+**Limitación de confianza:** las métricas y predicciones se calcularon en el dispositivo del usuario; RLS protege acceso, no certifica que un cliente no fue alterado.

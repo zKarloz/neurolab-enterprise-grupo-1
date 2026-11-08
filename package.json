@@ -22,6 +22,7 @@
     "test:fase3:live": "node --env-file=.env.test.local scripts/test-fase3-live.mjs",
     "test:persistence": "node --experimental-strip-types --test tests/persistence.test.mjs",
     "test:evaluation": "node --experimental-strip-types --test tests/evaluation.test.mjs tests/history.test.mjs tests/fase4.structure.test.mjs",
+    "test:fase4:prediction": "node --experimental-strip-types --test tests/fase4.prediction-comparison.test.mjs tests/fase4.prediction-structure.test.mjs",
     "test:fase4:live": "node --experimental-strip-types --env-file=.env.test.local scripts/test-fase4-live.mjs"
   },
   "engines": {

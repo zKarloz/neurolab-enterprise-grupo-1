@@ -16,6 +16,7 @@ import type { EpochMetrics, TrainingEvent, TrainingSummary } from '../../ml/trai
 import type { TestEvaluation } from '../../ml/evaluation/metrics.ts'
 import { persistTestEvaluation } from '../../services/evaluationPersistence.ts'
 import { TestEvaluationCard } from '../evaluation/TestEvaluationCard.tsx'
+import { SessionPredictionCard } from '../evaluation/SessionPredictionCard.tsx'
 import { getProject } from '../../services/projects'
 import { createPersistedRun, finalizeRun, recordBackend, recordEpoch } from '../../services/trainingPersistence.ts'
 import type { FinalRunStatus } from '../../services/trainingPersistence.ts'
@@ -264,13 +265,20 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
         {summary && <Notice tone="success">{summary.epochsCompleted} épocas reales · {summary.durationMs.toLocaleString('es-PE')} ms · {summary.parameters.toLocaleString('es-PE')} parámetros · {summary.backend.toUpperCase()}.</Notice>}
       </div>}
       {evaluation && <TestEvaluationCard evaluation={evaluation} confirmed={evaluationConfirmed} />}
+      {status === 'completed' && summary && <SessionPredictionCard
+        key={runId} manifest={dataset.manifest}
+        predict={(values) => {
+          if (!session.current) return Promise.reject(new Error('El modelo de esta sesión no está disponible.'))
+          return session.current.predict(values)
+        }}
+      />}
       {runId && <div className="space-y-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-4" aria-live="polite">
         <p className="text-sm font-semibold">Persistencia en Supabase</p>
         <p className="text-sm">{savedEpochs} / {config.epochs} épocas confirmadas · {syncState === 'confirmed' ? 'Estado final confirmado' : syncState === 'error' ? 'Guardado parcial o fallido' : 'Sincronizando escrituras'}</p>
         <p className="break-all text-xs text-[var(--muted)]">Ejecución: {runId}</p>
         {syncError && <Notice tone="error">{syncError} Las métricas locales pueden diferir de las confirmadas. No cierres la pestaña hasta revisar el problema.</Notice>}
       </div>}
-      <Notice>El CSV permanece local y no se guardan pesos del modelo. Los datos de preparación, la configuración, el backend y cada época confirmada se conservan en Supabase. Si se pierde la red, solo cuentan como guardados los datos confirmados. La evaluación de prueba y el historial se incorporan progresivamente en la Fase 4; los pesos y predicción desde una versión recuperada quedan para Fase 5.</Notice>
+      <Notice>El CSV permanece local y no se guardan pesos del modelo. Los datos de preparación, la configuración, el backend y cada época confirmada se conservan en Supabase. Si se pierde la red, solo cuentan como guardados los datos confirmados. La evaluación de prueba y el historial se conservan en Supabase. Puedes predecir mientras esta pantalla permanezca abierta; los pesos solo se podrán recuperar después de cerrar sesión cuando implementemos la Fase 5.</Notice>
     </Surface>
   )
 }
