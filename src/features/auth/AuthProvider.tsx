@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { PropsWithChildren } from 'react'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import type { AppProfile, AuthState } from '../../types/auth'
-import { signInIdentityChanged, verificationStarted, verificationUnavailable } from './refreshPolicy.ts'
+import { isMissingAuthSession, signInIdentityChanged, verificationStarted, verificationUnavailable } from './refreshPolicy.ts'
 
 interface AuthContextValue {
   state: AuthState
@@ -31,11 +31,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const { data: identity, error: identityError } = await supabase.auth.getUser()
       if (current !== sequence.current) return
       if (identityError) {
-        // Mostrar solo el estado y el tipo de error: nunca tokens ni credenciales.
+        // No tener sesión es normal antes del login; no se considera error de servicio.
+        if (isMissingAuthSession(identityError)) {
+          setState({ status: 'guest' })
+          return
+        }
+        // Mostrar solo identificadores técnicos seguros, nunca tokens ni credenciales.
         console.warn('[NeuroLab/Auth] Verificación de identidad fallida', {
-          status: identityError.status, name: identityError.name,
+          status: identityError.status, name: identityError.name, code: identityError.code,
         })
-        // Una sesión inválida se descarta, a diferencia de un fallo de red temporal.
         if (identityError.status === 401 || identityError.status === 403) setState({ status: 'guest' })
         else setState((previous) => verificationUnavailable(previous, 'No se pudo verificar la sesión.'))
         return

@@ -16,3 +16,9 @@ export function signInIdentityChanged(previous: AuthState, nextUserId: string | 
     ? { status: 'loading' }
     : previous
 }
+
+/** Diferencia una visita sin sesión de una caída del servicio de autenticación. */
+export function isMissingAuthSession(error: { name?: string; code?: string } | null | undefined): boolean {
+  // No considerar todo error HTTP 400 como ausencia de sesión.
+  return error?.name === 'AuthSessionMissingError'
+}
