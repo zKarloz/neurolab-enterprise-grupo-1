@@ -46,3 +46,7 @@
 - Se incorporó un verificador en vivo de lectura RLS y un smoke test de rutas Vercel; **no ejecutados contra el proyecto del usuario en este entorno**.
 - Persiste pendiente: pruebas RLS cruzadas, cambio de contraseña, `npm run typecheck`, build local y URL de producción verificada.
 - Guía actualizada: `FASE_1_VALIDACION_Y_DESPLIEGUE.md`.
+
+## Hito de despliegue informado el 7 de noviembre de 2026
+
+El usuario confirmó que el proyecto funciona en `https://neurolab-enterprise-grupo-1.vercel.app/` y que accede con su cuenta de Administrador. El entorno de generación no pudo inspeccionar automáticamente la URL ni ejecutar pruebas RLS cruzadas. Se continuó con Fase 2 a petición del usuario; las pruebas pendientes no deben figurar como ejecutadas.

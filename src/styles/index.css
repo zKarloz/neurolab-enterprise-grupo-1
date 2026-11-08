@@ -1,31 +1,51 @@
 @import "tailwindcss";
 
-/* Paleta neutra; modo oscuro completamente en escala de grises. */
+/* Base neutral con acentos lavanda y celeste pastel; en oscuro, acentos apagados. */
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --page: #f7f7f8;
+  --page: #f7f6fd;
   --surface: #ffffff;
-  --surface-muted: #f3f4f5;
-  --ink: #202226;
-  --muted: #74777c;
-  --line: #e5e6e8;
-  --focus: #d1d5db;
+  --surface-muted: #f0edf9;
+  --ink: #292738;
+  --muted: #65687a;
+  --line: #dedbef;
+  --focus: #9882cf;
+  --accent: #d7c8f5;
+  --accent-secondary: #c3eaf5;
+  --accent-ink: #2d2448;
+  --hero-bg: linear-gradient(125deg, #ded2f7 0%, #d7eef9 100%);
+  --hero-ink: #292440;
+  --hero-action-bg: #ffffff;
+  --hero-action-ink: #292440;
 }
 :root.dark {
-  --page: #121212;
-  --surface: #1c1c1c;
-  --surface-muted: #282828;
-  --ink: #f2f2f2;
-  --muted: #aeaeae;
-  --line: #363636;
-  --focus: #666666;
+  --page: #141414;
+  --surface: #202020;
+  --surface-muted: #2b2b2b;
+  --ink: #f1f1f1;
+  --muted: #b2b0b9;
+  --line: #3b3b3b;
+  --focus: #afa0cc;
+  --accent: #a49abf;
+  --accent-secondary: #86abb8;
+  --accent-ink: #1b1825;
+  /* Excepción solicitada: la tarjeta Punto de partida permanece gris. */
+  --hero-bg: #353535;
+  --hero-ink: #f4f4f4;
+  --hero-action-bg: #eeeeee;
+  --hero-action-ink: #242424;
 }
+
+/* El tema se define mediante variables para mantener los componentes reutilizables. */
+.home-hero { background: var(--hero-bg); color: var(--hero-ink); }
+.home-hero__action { background: var(--hero-action-bg); color: var(--hero-action-ink); }
+
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; color: var(--ink); background: var(--page); }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
-::selection { color: var(--surface); background: var(--ink); }
+::selection { color: var(--accent-ink); background: var(--accent); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }

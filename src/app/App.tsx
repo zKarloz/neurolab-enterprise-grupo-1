@@ -4,6 +4,8 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { AccountPage } from '../features/auth/AccountPage'
 import { AppShell } from '../components/layout/AppShell'
 import { HomePage } from '../features/home/HomePage'
+import { ProjectsPage } from '../features/projects/ProjectsPage'
+import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
 import { PageState } from '../components/ui/PageState'
 
 function PrivateRoute() {
@@ -33,6 +35,8 @@ export function App() {
         <Route element={<AppShell />}>
           <Route path="/inicio" element={<HomePage />} />
           <Route path="/cuenta" element={<AccountPage />} />
+          <Route path="/proyectos" element={<ProjectsPage />} />
+          <Route path="/proyectos/:projectId" element={<ProjectDetailPage />} />
           <Route path="/" element={<Navigate to="/inicio" replace />} />
         </Route>
       </Route>

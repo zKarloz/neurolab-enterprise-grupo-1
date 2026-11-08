@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { BrainCircuit, ChevronRight, CircleUserRound, LogOut, Menu, PanelLeftClose, ShieldCheck, X, LayoutDashboard } from 'lucide-react'
+import { BrainCircuit, ChevronRight, CircleUserRound, LogOut, Menu, PanelLeftClose, ShieldCheck, X, LayoutDashboard, FolderKanban } from 'lucide-react'
 import { ThemeToggle } from '../ui/ThemeToggle'
 import { useAuth } from '../../features/auth/AuthProvider'
 
 const links = [
   { to: '/inicio', title: 'Inicio', icon: LayoutDashboard },
+  { to: '/proyectos', title: 'Proyectos', icon: FolderKanban },
   { to: '/cuenta', title: 'Mi cuenta', icon: CircleUserRound },
 ] as const
 
@@ -30,7 +31,7 @@ export function AppShell() {
       navigate('/acceder', { replace: true })
     } catch { setSignOutError(true) }
   }
-  const title = location.pathname === '/cuenta' ? 'Mi cuenta' : 'Inicio'
+  const title = location.pathname === '/cuenta' ? 'Mi cuenta' : location.pathname.startsWith('/proyectos') ? 'Proyectos' : 'Inicio'
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -41,7 +42,7 @@ export function AppShell() {
       <nav aria-label="Navegación principal" className="flex-1 px-4 py-8">
         <p className="px-3 text-[10px] font-semibold uppercase tracking-[.2em] text-[var(--muted)]">Espacio de trabajo</p>
         <div className="mt-4 space-y-1">{links.map(({to,title:label,icon:Icon}) => <NavLink key={to} to={to} className={({isActive})=>`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors ${isActive?'bg-[var(--surface-muted)] text-[var(--ink)]':'text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]'}`}><Icon size={18} strokeWidth={1.8} aria-hidden="true"/>{label}</NavLink>)}</div>
-        <div className="mt-9 border-t border-[var(--line)] pt-7"><p className="px-3 text-[10px] font-semibold uppercase tracking-[.2em] text-[var(--muted)]">Próximamente</p><div className="mt-4 space-y-1 px-3 text-xs leading-6 text-[var(--muted)]"><p>Proyectos de IA · Fase 2</p><p>Arquitecturas · Fase 3</p><p>Entrenamiento · Fase 3</p></div></div>
+        <div className="mt-9 border-t border-[var(--line)] pt-7"><p className="px-3 text-[10px] font-semibold uppercase tracking-[.2em] text-[var(--muted)]">Próximamente</p><div className="mt-4 space-y-1 px-3 text-xs leading-6 text-[var(--muted)]"><p>Arquitecturas · Fase 3</p><p>Entrenamiento · Fase 3</p></div></div>
       </nav>
       <div className="border-t border-[var(--line)] p-4"><div className="rounded-xl bg-[var(--surface-muted)] p-3"><div className="flex items-center gap-2 text-xs font-medium"><ShieldCheck size={15}/> Acceso verificado</div><p className="mt-1 text-xs text-[var(--muted)]">Protegido por Supabase Auth y RLS.</p></div></div>
     </div>

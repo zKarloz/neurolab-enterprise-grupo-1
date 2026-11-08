@@ -1,19 +1,19 @@
 # NeuroLab Enterprise
 
-**Fase 1 — Repositorio inicial y maquetado** · Proyecto nuevo conforme al diseño de Fase 0 aprobado el 7 de noviembre de 2026.
+**Fase 2 — Proyectos de IA** · Continuación de la base React/Supabase de Fase 1 conforme al diseño aprobado.
 
-> **Estado reportado (noviembre de 2026):** usuario administrador creado, migración y bootstrap aplicados en Supabase, inicio de sesión y rol administrativo visibles en la web del usuario. **Sin verificación independiente aquí** de RLS cruzado, compilación o despliegue Vercel. La Fase 1 continúa abierta.
+> **Estado reportado (7 de noviembre de 2026):** el usuario confirmó acceso real del Administrador y despliegue en https://neurolab-enterprise-grupo-1.vercel.app/. El despliegue no pudo inspeccionarse automáticamente desde este entorno. **Fase 2: código y migración preparados, NO aplicados todavía a tu Supabase.**
 
 ## Funcionalidad incluida
 
 - React + TypeScript estricto + Vite + Tailwind CSS + Lucide.
 - Pantalla de login con email y contraseña, sin registro público, ni OAuth, ni recuperación por correo ficticia.
 - Sesión validada con Supabase Auth; además se exige perfil activo en `public.app_users` protegido con RLS.
-- Rutas `/acceder` (pública), `/inicio` (privada) y `/cuenta` (privada).
+- Rutas `/acceder` (pública), `/inicio`, `/cuenta`, `/proyectos` y `/proyectos/:projectId` (privadas).
 - Cierre de sesión; cambio de contraseña mediante Supabase Auth.
 - Maquetado profesional responsive, menú móvil, componentes de interfaz y temas claro (predeterminado) / oscuro en escala de grises.
 - Pantallas de carga, configuración faltante, acceso bloqueado y error de conexión.
-- **No hay proyectos ficticios, datos de entrenamiento ni resultados simulados.**
+- **Fase 2**: proyectos, integrantes y roles, con tablas PostgreSQL, RLS, funciones autorizadas y auditoría administrativa. No hay proyectos ficticios, entrenamiento ni resultados simulados.
 
 ## Inicio rápido (VSCode + Git Bash)
 
@@ -30,9 +30,9 @@ Abrir la dirección que informe Vite. **Node.js requerido:** 22.12 o superior (V
 
 La clave `VITE_SUPABASE_PUBLISHABLE_KEY` es pública (`sb_publishable_...`). **Nunca usar `sb_secret_`, `service_role` o credenciales administrativas en frontend.** El archivo `.env.local` está ignorado por Git.
 
-Para la configuración de Auth y bootstrap ver la [Guía inicial](docs/operations/FASE_1_CONFIGURACION.md). Con el Administrador ya creado, continuar con [Validación de RLS y despliegue en Vercel](docs/operations/FASE_1_VALIDACION_Y_DESPLIEGUE.md). **No volver a ejecutar el bootstrap.**
+Para la configuración de Auth y bootstrap ver la [Guía inicial](docs/operations/FASE_1_CONFIGURACION.md). Con el Administrador ya creado, continuar con [Fase 2: proyectos](docs/operations/FASE_2_PROYECTOS.md). **No volver a ejecutar el bootstrap ni la migración F1.**
 
-## Árbol de carpetas inicial
+## Árbol de carpetas por fases
 
 ```text
 src/
@@ -41,12 +41,14 @@ src/
   components/layout/  Layout protegido responsive
   features/auth/      Login, sesión y contraseña propia
   features/home/      Inicio sin datos ficticios
+  features/projects/  CRUD de proyectos e integrantes
+  services/           Operaciones Supabase centralizadas
   lib/                Cliente público de Supabase
   styles/             Tema claro/oscuro
   types/              Contratos de autenticación
 supabase/
-  migrations/         Esquema mínimo de app_users
-  tests/              Checklist RLS por ejecutar
+  migrations/         F1 app_users + F2 proyectos/miembros/auditoría
+  tests/              Matriz de pruebas RLS y cuentas cruzadas
 ```
 
 ## Decisiones y límites
@@ -66,10 +68,12 @@ npm run typecheck       # Requiere npm install
 npm run build           # Requiere npm install
 ```
 
-## Próximos pasos antes de cerrar la Fase 1
+## Próximos pasos para cerrar la Fase 2
 
-1. Instalar dependencias, generar y versionar `package-lock.json`; corregir incompatibilidades detectadas por compilación.
-2. **Ya realizado por el usuario:** crear Supabase, instalar migración/bootstrap y verificar login Administrador. Revisar que el registro público esté desactivado.
-3. Probar sesiones válidas, inválidas, cuentas inactivas y accesos negados, incluida RLS con dos cuentas.
-4. Desplegar a Vercel y verificar conexión real con URL de producción.
-5. Organizar commit de validación y documentar evidencia de pruebas.
+1. Ejecutar **únicamente** `supabase/migrations/202611070002_projects_members_audit.sql` una vez desde Supabase SQL Editor.
+2. En Git Bash: `npm install`, `npm run typecheck`, `npm run build`, `npm run test:structure`, `npm run test:projects`.
+3. Crear una cuenta de prueba adicional desde Supabase Dashboard y ejecutar las pruebas con dos identidades según `supabase/tests/FASE_2_RLS.md`.
+4. Hacer commit y push a `main` para actualizar Vercel; probar el flujo real en `/proyectos`.
+5. Documentar evidencia y confirmar cierre de Fase 2 antes de iniciar Feedforward (F3).
+
+**Sin claves administrativas ni archivos CSV originales en el frontend.**

@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "test:structure": "node --test tests/structure.test.mjs",
     "test:rls:live": "node --env-file=.env.local scripts/verify-fase1.mjs",
-    "test:deploy": "node scripts/verify-deployment.mjs"
+    "test:deploy": "node scripts/verify-deployment.mjs",
+    "test:projects": "node --test tests/projects.structure.test.mjs",
+    "test:design": "node --test tests/design.structure.test.mjs",
+    "test:fase2:live": "node --env-file=.env.test.local scripts/test-fase2-live.mjs"
   },
   "engines": {
     "node": ">=22.12.0"
