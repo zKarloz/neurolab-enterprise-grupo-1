@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Paleta neutra; modo oscuro completamente en escala de grises. */
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --page: #f7f7f8;
+  --surface: #ffffff;
+  --surface-muted: #f3f4f5;
+  --ink: #202226;
+  --muted: #74777c;
+  --line: #e5e6e8;
+  --focus: #d1d5db;
+}
+:root.dark {
+  --page: #121212;
+  --surface: #1c1c1c;
+  --surface-muted: #282828;
+  --ink: #f2f2f2;
+  --muted: #aeaeae;
+  --line: #363636;
+  --focus: #666666;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; color: var(--ink); background: var(--page); }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+::selection { color: var(--surface); background: var(--ink); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
