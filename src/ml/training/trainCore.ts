@@ -3,7 +3,7 @@ import { validateDenseConfig } from '../networks/config.ts'
 import { evaluateBinary, evaluateRegression } from '../evaluation/metrics.ts'
 import type { DenseTrainConfig } from '../networks/config.ts'
 import type { PreparedDataset } from '../preprocessing/types.ts'
-import type { BackendName, EpochMetrics, RuntimeContext, TrainingEvent } from './types.ts'
+import type { BackendName, DensePredictor, EpochMetrics, RuntimeContext, TrainingEvent } from './types.ts'
 
 /** Prueba entrenamiento y gradientes, no solo inicialización del backend. */
 async function probeTrainBackend(backend: BackendName): Promise<boolean> {
@@ -26,6 +26,8 @@ async function probeTrainBackend(backend: BackendName): Promise<boolean> {
   } catch {
     return false
   } finally {
+    // El modelo de prueba no se reutiliza para inferencia: liberar siempre
+    // tanto sus tensores como los recursos del optimizador y sus pesos.
     xs?.dispose()
     ys?.dispose()
     model?.dispose()
@@ -63,6 +65,7 @@ export async function trainDenseModel(
   context: RuntimeContext,
   emit: (event: TrainingEvent) => void,
   cancelled: () => boolean,
+  onReady?: (predictor: DensePredictor) => void,
 ): Promise<void> {
   const features = dataset.manifest.featureNames.length
   const validated = validateDenseConfig(config, features, dataset.train.x.length, dataset.manifest.problemType)
@@ -81,6 +84,7 @@ export async function trainDenseModel(
   let optimizer: tf.Optimizer | null = null
   const tensors: tf.Tensor[] = []
   const startedAt = performance.now()
+  let retainedForPrediction = false
   // Los callbacks ocurren durante fit(); conservar sus métricas en una colección
   // evita que TypeScript considere imposible la asignación desde onEpochEnd.
   const completedEpochs: EpochMetrics[] = []
@@ -166,6 +170,42 @@ export async function trainDenseModel(
         ? evaluateBinary(dataset.test.y, predicted)
         : evaluateRegression(dataset.test.y, predicted)
       emit({ type: 'evaluation', evaluation })
+      // Solo F4 conserva los pesos en memoria para inferencia; la interfaz/Worker
+      // debe llamar a dispose() al iniciar otra ejecución o abandonar la ruta.
+      if (onReady) {
+        if (!model || !optimizer) throw new Error('No está disponible el modelo entrenado.')
+        const trainedModel: tf.Sequential = model
+        const trainedOptimizer: tf.Optimizer = optimizer
+        let disposed = false
+        onReady({
+          predict: async (values) => {
+            if (disposed) throw new Error('El modelo local ya fue liberado.')
+            if (values.length !== features || values.some((value) => !Number.isFinite(value))) {
+              throw new Error('La entrada de predicción tiene dimensiones o valores inválidos.')
+            }
+            // tidy libera la entrada, pero conserva la salida hasta leer data().
+            const output = tf.tidy(() => {
+              const input = tf.tensor2d(values, [1, features])
+              const prediction = trainedModel.predict(input)
+              if (Array.isArray(prediction)) throw new Error('La red devolvió salidas inesperadas.')
+              return prediction
+            })
+            try {
+              const values = await output.data()
+              const result = Number(values[0])
+              if (!Number.isFinite(result)) throw new Error('La red devolvió una predicción no finita.')
+              return result
+            } finally { output.dispose() }
+          },
+          dispose: () => {
+            if (disposed) return
+            disposed = true
+            trainedModel.dispose()
+            trainedOptimizer.dispose()
+          },
+        })
+        retainedForPrediction = true
+      }
       emit({ type: 'completed', summary: {
         backend, context, tfjsVersion: tf.version.tfjs,
         durationMs: Math.round(performance.now() - startedAt),
@@ -174,7 +214,9 @@ export async function trainDenseModel(
     }
   } finally {
     tensors.forEach((tensor) => tensor.dispose())
-    model?.dispose()
-    optimizer?.dispose()
+    if (!retainedForPrediction) {
+      model?.dispose()
+      optimizer?.dispose()
+    }
   }
 }
