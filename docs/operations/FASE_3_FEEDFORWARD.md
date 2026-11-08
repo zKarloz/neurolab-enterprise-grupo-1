@@ -1,6 +1,6 @@
 # Fase 3 — Feedforward Dense (documentación consolidada)
 
-**Estado:** en progreso. Incremento 1 (CSV y preprocesamiento) validado en navegador; incremento 2 (entrenamiento real) probado con datasets por el usuario; incremento 2.1 (revalidación Auth, recomendación de objetivo y gráficas) preparado, pendiente de build y verificación en Vercel. Fase 2 validada y cerrada.
+**Estado:** en progreso. Incremento 1 (CSV y preprocesamiento) validado en navegador; incremento 2 (entrenamiento real) probado con datasets por el usuario; incremento 2.1 (revalidación Auth, recomendación de objetivo y gráficas) verificado en navegador por el usuario; incremento 3 (persistencia Supabase/RLS) preparado y pendiente de migración y pruebas en Vercel. Fase 2 validada y cerrada.
 
 **Base aprobada:** `docs/architecture/FASE_0_DISENO_APROBADO.md`. No existe backend Python, cola de servidor ni importación de CSV completos a Supabase. El Administrador global no hereda el rol Ingeniero.
 
@@ -117,3 +117,55 @@ El build integral y el entrenamiento TF.js deben verificarse en el entorno del u
 Pruebas manuales: importar ambos CSV, confirmar recomendación y aviso; entrenar como Ingeniero, observar las curvas variar con cada época; cambiar a otra pestaña del navegador y volver sin perder CSV ni Worker; cerrar sesión y confirmar que se retira el acceso; verificar el tema oscuro y la animación reducida.
 
 Este incremento **no requiere SQL** y **no cierra la Fase 3**. La prioridad sigue siendo persistir arquitecturas, metadatos y resultados reales con políticas RLS.
+
+## 6. Incremento 3 — Persistencia real en Supabase (8 de noviembre de 2026)
+
+**Estado:** migración, código y pruebas de verificación preparados. Pendiente de ejecutar migración, `npm run build` y pruebas reales en Supabase/Vercel. No declarar Fase 3 cerrada antes de estas comprobaciones.
+
+### 6.1 Objetivo y límite de alcance
+
+- `architectures`, `datasets`, `training_runs` y `training_metrics` se crean en PostgreSQL; todas con RLS y **solo SELECT concedido directamente** a `authenticated`.
+- **RPC SECURITY DEFINER** específicas y restringidas a `authenticated` registran de forma transaccional las instantáneas de arquitectura/dataset y la ejecución; otras RPC actualizan el backend, guardan cada época y confirman estado final.
+- Todas las operaciones requieren `app_users.status = active`, rol explícito **engineer** en el mismo proyecto y proyecto activo. Un Administrador global que solo sea Responsable tampoco puede entrenar ni registrar métricas.
+- Se asocian referencias compuestas `(project_id, id)` para impedir mezclar arquitecturas, datasets, ejecuciones y métricas entre proyectos.
+- Los **CSV siguen exclusivamente en el navegador**. Se persisten nombre, número de filas, tamaño, esquema agregado de columnas (tipo y faltantes), SHA-256 local, objetivo, manifiesto de preprocesamiento, configuración Dense, semilla, versión de app, backend TF.js y métricas por época. Nunca se envían matrices `x/y`, filas ni archivos CSV.
+- Se crea una **instantánea por entrenamiento**; el servidor numera versiones por proyecto y nombre bajo bloqueo de fila. No intenta deduplicar archivos ni versiones automáticamente.
+- Las métricas se calculan en `onEpochEnd` y se envían secuencialmente para evitar alterar el orden. La UI diferencia valores locales de `épocas confirmadas`, y solo muestra `Estado final confirmado` después de obtener la confirmación de la RPC de cierre.
+- Si falla la red o la autorización, la interfaz informa **guardado parcial**, solicita detener el entrenamiento local y nunca afirma que los datos no confirmados están guardados. Un cierre abrupto puede dejar la última ejecución en `created/running`; la conciliación automática de registros huérfanos será una decisión posterior de confiabilidad.
+- Se añade al proyecto una **lista mínima de ejecuciones guardadas** visible aun sin seleccionar CSV, para verificar la recuperación tras recargar. La página de historial completo, la evaluación de prueba y la comparación pertenecen a la Fase 4.
+- El modelo **no se conserva** en este incremento: los artefactos privados y versiones inmutables se implementarán en la Fase 5. No se usan SSE, WebSocket, colas, workers Python ni datos ficticios.
+
+### 6.2 Instalación y comprobación
+
+1. Descomprimir únicamente el parche incremental sobre el repositorio Git existente, sin reemplazar `.git`, `.env.local`, `.env.test.local` ni el lockfile.
+2. **Antes de desplegar el frontend**, ejecutar una sola vez `supabase/migrations/202611080003_feedforward_persistence.sql` en Supabase SQL Editor, después de las migraciones F1 y F2. No volver a ejecutar el bootstrap del primer Administrador.
+3. En VSCode/Git Bash:
+
+```bash
+npm install
+npm run test:persistence
+npm run test:preprocessing
+npm run test:network
+npm run typecheck
+npm run build
+npm run test:training:runtime
+npm run test:fase3:live
+```
+
+4. El test live reutiliza las variables de `.env.test.local` de Fase 2; **NUNCA subirlas ni compartir contraseñas**. Usa Admin y una segunda cuenta ordinaria; crea un proyecto temporal, comprueba que Admin sin rol Ingeniero/Lector no pueden ejecutar RPC, promueve al usuario a Ingeniero, registra dos épocas de prueba, comprueba que no puede editarlas y revoca el acceso. Archiva el proyecto temporal.
+5. Como Ingeniero en un proyecto activo, importar ambos CSV de demostración, ejecutar entrenamiento real y comprobar que `épocas confirmadas` progresa hasta el total; al recargar la página debe aparecer el resumen de ejecución ya guardado aun sin reimportar el CSV. Verificar cambios de pestaña, cancelación, pérdida de red y falta de rol.
+6. Una vez que pasan build, tests y prueba en navegador, ejecutar:
+
+```bash
+git add .
+git commit -m "feat(fase3): persistir entrenamientos y metricas con RLS"
+git push origin main
+```
+
+Vercel desplegará automáticamente. Si falta la migración, el inicio del entrenamiento fallará con un mensaje controlado: no se hace fallback a datos inventados.
+
+### 6.3 Límites de confianza y alcance posterior
+
+Las RPC garantizan pertenencia, permisos, integridad referencial, secuencia de épocas y escrituras confirmadas, **no demuestran que el navegador haya calculado realmente esos números**. Se consideran resultados reportados por el cliente, reproducibles con el CSV original.
+
+Todavía pendientes para cerrar la Fase 3: build y entrenamiento real con el parche de persistencia, pruebas RLS live y verificación en Vercel. F4 incorpora evaluación final sobre test e historial completo; F5 artefactos de modelo privados e inmutables. No se adelantaron funciones administrativas de F6.

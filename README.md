@@ -94,3 +94,7 @@ No hay migración adicional para este incremento ni se sube el CSV. El entrenami
 ## Fase 3 · Incremento 2 — Entrenamiento Dense
 
 Con un proyecto activo y rol **Ingeniero**, abre Proyectos → Detalle → Dataset local, prepara un CSV y utiliza el constructor Feedforward Dense al final de la pantalla. TF.js se entrena en el navegador; no hay API Python ni datos simulados. Ejecuta `npm install`, `npm run typecheck`, `npm run build`, `npm run test:network` y `npm run test:training:runtime` antes del despliegue. La documentación se mantiene en `docs/operations/FASE_3_FEEDFORWARD.md`.
+
+### Fase 3 — Persistencia de Feedforward (incremento 3)
+
+La migración `supabase/migrations/202611080003_feedforward_persistence.sql` agrega datos de arquitecturas, metadatos de CSV y ejecuciones con RLS. Aplicarla **una sola vez** antes de desplegar este frontend. Las filas originales de CSV no se suben. Comprobar `npm run test:persistence` y, con `.env.test.local` y dos cuentas, `npm run test:fase3:live`. Documentación completa dentro del **único archivo** `docs/operations/FASE_3_FEEDFORWARD.md`.

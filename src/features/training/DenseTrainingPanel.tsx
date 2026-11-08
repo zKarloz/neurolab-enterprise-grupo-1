@@ -9,13 +9,29 @@ import { supabase } from '../../lib/supabase'
 import { DEFAULT_DENSE_CONFIG, validateDenseConfig } from '../../ml/networks/config.ts'
 import type { DenseTrainConfig, HiddenActivation } from '../../ml/networks/config.ts'
 import type { PreparedDataset } from '../../ml/preprocessing/types.ts'
+import type { LocalCsvMetadata } from '../../ml/preprocessing/fileMetadata.ts'
 import { startBrowserTraining } from '../../ml/training/browserSession.ts'
 import type { TrainingSession } from '../../ml/training/browserSession.ts'
 import type { EpochMetrics, TrainingEvent, TrainingSummary } from '../../ml/training/types.ts'
 import { getProject } from '../../services/projects'
+import { createPersistedRun, finalizeRun, recordBackend, recordEpoch } from '../../services/trainingPersistence.ts'
+import type { FinalRunStatus } from '../../services/trainingPersistence.ts'
 import { TrainingMetricsChart } from './TrainingMetricsChart.tsx'
 
-interface DenseTrainingPanelProps { dataset: PreparedDataset; projectId: string; userId: string }
+interface DenseTrainingPanelProps {
+  dataset: PreparedDataset
+  source: LocalCsvMetadata
+  projectId: string
+  userId: string
+  onPersisted: () => void
+}
+
+interface RunPersistenceStream {
+  id: string
+  chain: Promise<void>
+  failed: boolean
+  terminalQueued: boolean
+}
 type RunStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'cancelled' | 'failed'
 const ACTIVATIONS = [
   { value: 'relu', label: 'ReLU' },
@@ -28,16 +44,22 @@ function showMetric(value: number | null): string {
 }
 
 /** Vista de F3 con gráfica incremental solicitada: nunca usa métricas ficticias. */
-export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTrainingPanelProps) {
+export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersisted }: DenseTrainingPanelProps) {
   const [config, setConfig] = useState<DenseTrainConfig>(() => ({ ...DEFAULT_DENSE_CONFIG, hiddenLayers: [...DEFAULT_DENSE_CONFIG.hiddenLayers] }))
   const [status, setStatus] = useState<RunStatus>('idle')
   const [error, setError] = useState('')
   const [backend, setBackend] = useState('')
   const [epochs, setEpochs] = useState<EpochMetrics[]>([])
   const [summary, setSummary] = useState<TrainingSummary | null>(null)
+  const [savedEpochs, setSavedEpochs] = useState(0)
+  const [runId, setRunId] = useState('')
+  const [syncState, setSyncState] = useState<'idle' | 'pending' | 'confirmed' | 'error'>('idle')
+  const [syncError, setSyncError] = useState('')
   const session = useRef<TrainingSession | null>(null)
+  const persistence = useRef<RunPersistenceStream | null>(null)
   const cancelledBeforeStart = useRef(false)
-  const active = ['starting', 'running', 'stopping'].includes(status)
+  const trainingActive = ['starting', 'running', 'stopping'].includes(status)
+  const active = trainingActive || (syncState === 'pending' && ['completed', 'cancelled', 'failed'].includes(status))
   const features = dataset.manifest.featureNames.length
 
   const configurationCheck = useMemo(() => {
@@ -45,14 +67,49 @@ export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTraining
     catch (cause) { return { valid: null, error: cause instanceof Error ? cause.message : 'Configuración inválida.' } }
   }, [config, dataset, features])
 
-  // Al abandonar la ruta, el Worker se detiene. El fallback en hilo principal para en el siguiente callback.
-  useEffect(() => () => session.current?.dispose(), [])
+  /** Las RPC se encadenan para conservar orden y confirmar cada época antes de finalizar. */
+  function queuePersist(stream: RunPersistenceStream, operation: () => Promise<void>) {
+    stream.chain = stream.chain.then(async () => {
+      if (!stream.failed) await operation()
+    }).catch((cause: unknown) => {
+      stream.failed = true
+      if (persistence.current === stream) {
+        setSyncState('error')
+        setSyncError(cause instanceof Error ? cause.message : 'Falló la confirmación en Supabase.')
+        onPersisted() // Permite volver a consultar el último progreso realmente confirmado.
+        // Sin persistencia íntegra no conviene seguir generando épocas sin trazabilidad.
+        session.current?.cancel()
+      }
+    })
+  }
+
+  function queueFinish(stream: RunPersistenceStream, finalStatus: FinalRunStatus, finalSummary?: TrainingSummary, message?: string) {
+    if (stream.terminalQueued) return
+    stream.terminalQueued = true
+    queuePersist(stream, async () => {
+      await finalizeRun(stream.id, finalStatus, finalSummary, message)
+      if (persistence.current === stream) {
+        setSyncState('confirmed')
+        onPersisted()
+      }
+    })
+  }
+
+  // Al abandonar esta ruta, el entrenamiento local se detiene y se intenta registrar interrupción.
+  // El navegador cerrado abruptamente puede impedir la última escritura: no se promete recuperación automática.
+  useEffect(() => () => {
+    cancelledBeforeStart.current = true
+    session.current?.dispose()
+    const stream = persistence.current
+    if (stream && !stream.terminalQueued) queueFinish(stream, 'interrupted')
+  }, [])
 
   function changeLayer(index: number, change: Partial<DenseTrainConfig['hiddenLayers'][number]>) {
     setConfig((previous) => ({ ...previous, hiddenLayers: previous.hiddenLayers.map((layer, i) => i === index ? { ...layer, ...change } : layer) }))
   }
 
-  function onTrainingEvent(event: TrainingEvent) {
+  function onTrainingEvent(event: TrainingEvent, stream: RunPersistenceStream) {
+    if (persistence.current !== stream) return
     switch (event.type) {
       case 'initializing':
         setStatus('starting')
@@ -61,20 +118,28 @@ export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTraining
       case 'backend':
         setStatus((previous) => previous === 'stopping' ? previous : 'running')
         setBackend(`${event.backend.toUpperCase()} · ${event.context === 'worker' ? 'Web Worker' : 'hilo principal'} · TF.js ${event.tfjsVersion}`)
+        queuePersist(stream, () => recordBackend(stream.id, event.backend, event.context, event.tfjsVersion))
         break
       case 'epoch':
         setEpochs((previous) => [...previous, event.metrics])
+        queuePersist(stream, async () => {
+          await recordEpoch(stream.id, event.metrics)
+          if (persistence.current === stream) setSavedEpochs(event.metrics.epoch)
+        })
         break
       case 'completed':
         setSummary(event.summary)
         setStatus('completed')
+        queueFinish(stream, 'completed', event.summary)
         break
       case 'cancelled':
         setStatus('cancelled')
+        queueFinish(stream, 'cancelled')
         break
       case 'error':
         setError(event.message)
         setStatus('failed')
+        queueFinish(stream, 'failed', undefined, event.message)
         break
     }
   }
@@ -85,10 +150,15 @@ export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTraining
     setBackend('')
     setEpochs([])
     setSummary(null)
+    setSavedEpochs(0)
+    setRunId('')
+    setSyncError('')
+    setSyncState('idle')
     setStatus('starting')
     cancelledBeforeStart.current = false
+    let stream: RunPersistenceStream | null = null
     try {
-      // Volver a comprobar la membresía antes de iniciar; ninguna autorización depende del indicador visual.
+      // La UI verifica permisos para dar feedback; el límite de seguridad real es la RPC + RLS.
       if (!supabase) throw new Error('Supabase no está configurado.')
       const [project, membership] = await Promise.all([
         getProject(projectId),
@@ -99,11 +169,26 @@ export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTraining
         throw new Error('Ya no tienes permiso de Ingeniero en este proyecto activo.')
       }
       if (cancelledBeforeStart.current) { setStatus('cancelled'); return }
+
+      // Crear run + instantáneas antes de iniciar TensorFlow.js. No se envía ninguna fila del CSV.
+      const id = await createPersistedRun(projectId, source, dataset, config)
+      stream = { id, chain: Promise.resolve(), failed: false, terminalQueued: false }
+      persistence.current = stream
+      setRunId(id)
+      setSyncState('pending')
+      onPersisted()
+      if (cancelledBeforeStart.current) {
+        setStatus('cancelled')
+        queueFinish(stream, 'cancelled')
+        return
+      }
       session.current?.dispose()
-      session.current = startBrowserTraining(dataset, config, onTrainingEvent)
+      const currentStream = stream
+      session.current = startBrowserTraining(dataset, config, (event) => onTrainingEvent(event, currentStream))
     } catch (cause) {
       setStatus('failed')
       setError(cause instanceof Error ? cause.message : 'No se pudo iniciar el entrenamiento.')
+      if (stream) queueFinish(stream, 'failed', undefined, 'Error al inicializar el entrenamiento local')
     }
   }
 
@@ -148,7 +233,7 @@ export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTraining
       {configurationCheck.valid ? <p className="text-xs text-[var(--muted)]">{configurationCheck.valid.parameters.toLocaleString('es-PE')} parámetros entrenables estimados · Optimizador Adam.</p> : <Notice tone="error">{configurationCheck.error}</Notice>}
       <div className="flex flex-wrap gap-3">
         <Button type="button" disabled={active || !configurationCheck.valid} onClick={() => void start()} busy={status === 'starting'}><Cpu size={17}/> {status === 'completed' || status === 'cancelled' || status === 'failed' ? 'Entrenar nuevamente' : 'Iniciar entrenamiento'}</Button>
-        {active && <Button type="button" variant="outline" disabled={status === 'stopping'} onClick={cancel}><Square size={15}/> {status === 'stopping' ? 'Deteniendo…' : 'Solicitar cancelación'}</Button>}
+        {trainingActive && <Button type="button" variant="outline" disabled={status === 'stopping'} onClick={cancel}><Square size={15}/> {status === 'stopping' ? 'Deteniendo…' : 'Solicitar cancelación'}</Button>}
       </div>
       {error && <Notice tone="error">{error}</Notice>}
       {status !== 'idle' && <div className="space-y-3" aria-live="polite">
@@ -164,7 +249,13 @@ export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTraining
         {epochs.length > 0 && <TrainingMetricsChart epochs={epochs} problemType={dataset.manifest.problemType} />}
         {summary && <Notice tone="success">{summary.epochsCompleted} épocas reales · {summary.durationMs.toLocaleString('es-PE')} ms · {summary.parameters.toLocaleString('es-PE')} parámetros · {summary.backend.toUpperCase()}.</Notice>}
       </div>}
-      <Notice>En este incremento el modelo se libera al finalizar y los resultados permanecen en memoria. La persistencia de ejecuciones se incorporará en el siguiente incremento de Fase 3; evaluación del conjunto de prueba e historial remoto corresponden a Fase 4.</Notice>
+      {runId && <div className="space-y-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-4" aria-live="polite">
+        <p className="text-sm font-semibold">Persistencia en Supabase</p>
+        <p className="text-sm">{savedEpochs} / {config.epochs} épocas confirmadas · {syncState === 'confirmed' ? 'Estado final confirmado' : syncState === 'error' ? 'Guardado parcial o fallido' : 'Sincronizando escrituras'}</p>
+        <p className="break-all text-xs text-[var(--muted)]">Ejecución: {runId}</p>
+        {syncError && <Notice tone="error">{syncError} Las métricas locales pueden diferir de las confirmadas. No cierres la pestaña hasta revisar el problema.</Notice>}
+      </div>}
+      <Notice>El CSV permanece local y no se guardan pesos del modelo. Los datos de preparación, la configuración, el backend y cada época confirmada se conservan en Supabase. Si se pierde la red, solo cuentan como guardados los datos confirmados. La evaluación de prueba y el historial completo son de Fase 4.</Notice>
     </Surface>
   )
 }

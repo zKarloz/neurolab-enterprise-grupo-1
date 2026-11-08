@@ -7,9 +7,12 @@ import { SelectField } from '../../components/ui/SelectField'
 import { Surface } from '../../components/ui/Surface'
 import { useAuth } from '../auth/AuthProvider'
 import { DenseTrainingPanel } from '../training/DenseTrainingPanel'
+import { RecentTrainingRuns } from '../training/RecentTrainingRuns'
 import { getProject } from '../../services/projects'
 import { supabase } from '../../lib/supabase'
 import { prepareDataset } from '../../ml/preprocessing/prepare.ts'
+import { describeLocalCsv } from '../../ml/preprocessing/fileMetadata.ts'
+import type { LocalCsvMetadata } from '../../ml/preprocessing/fileMetadata.ts'
 import { analyzeObjective } from '../../ml/preprocessing/targetAnalysis.ts'
 import { MAX_CSV_BYTES, MAX_CSV_ROWS, readLocalCsv } from '../../ml/preprocessing/readCsv.ts'
 import type { PreparedDataset, ProblemType, RawTable } from '../../ml/preprocessing/types.ts'
@@ -23,6 +26,8 @@ export function LocalDatasetPage() {
   const [projectName, setProjectName] = useState('')
   const [table, setTable] = useState<RawTable | null>(null)
   const [filename, setFilename] = useState('')
+  const [source, setSource] = useState<LocalCsvMetadata | null>(null)
+  const [recentRefresh, setRecentRefresh] = useState(0)
   const [target, setTarget] = useState('')
   const [problemType, setProblemType] = useState<ProblemType>('binary')
   const [prepared, setPrepared] = useState<PreparedDataset | null>(null)
@@ -55,11 +60,14 @@ export function LocalDatasetPage() {
     setPrepared(null)
     setTarget('')
     setFilename('')
+    setSource(null)
     setError('')
     if (!file) return
     setBusy(true)
     try {
       const parsed = await readLocalCsv(file)
+      const details = await describeLocalCsv(file, parsed)
+      setSource(details)
       setTable(parsed)
       setFilename(file.name)
       const nextTarget = parsed.columns[parsed.columns.length - 1]
@@ -71,7 +79,7 @@ export function LocalDatasetPage() {
   }
 
   function prepare() {
-    if (!table || !target) return
+    if (!table || !target || !source) return
     setError('')
     setPrepared(null)
     try {
@@ -133,7 +141,8 @@ export function LocalDatasetPage() {
         </div>
         <Notice>Partición y transformaciones calculadas localmente. Puedes configurar y entrenar una Feedforward Dense debajo sin subir el CSV.</Notice>
       </Surface>}
-      {prepared && <DenseTrainingPanel dataset={prepared} projectId={projectId} userId={userId}/>}
+      {prepared && source && <DenseTrainingPanel key={`${source.fileHash}:${prepared.manifest.problemType}:${prepared.manifest.targetColumn}`} dataset={prepared} source={source} projectId={projectId} userId={userId} onPersisted={() => setRecentRefresh((value) => value + 1)} />}
+      <RecentTrainingRuns projectId={projectId} refresh={recentRefresh} />
     </div>
   )
 }

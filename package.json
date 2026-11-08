@@ -18,7 +18,9 @@
     "test:network": "node --experimental-strip-types --test tests/network-config.test.mjs",
     "test:training:runtime": "node --experimental-strip-types --test tests/training.runtime.test.mjs",
     "test:auth-refresh": "node --experimental-strip-types --test tests/auth-refresh.test.mjs",
-    "test:target-analysis": "node --experimental-strip-types --test tests/target-analysis.test.mjs"
+    "test:target-analysis": "node --experimental-strip-types --test tests/target-analysis.test.mjs",
+    "test:fase3:live": "node --env-file=.env.test.local scripts/test-fase3-live.mjs",
+    "test:persistence": "node --experimental-strip-types --test tests/persistence.test.mjs"
   },
   "engines": {
     "node": ">=22.12.0"
