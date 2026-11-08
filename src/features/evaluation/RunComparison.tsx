@@ -14,7 +14,10 @@ function show(value: number | null): string {
   return value === null ? 'No definido' : value.toLocaleString('es-PE', { maximumFractionDigits: 6 })
 }
 
-/** Compara dos ejecuciones autorizadas. No declara ganadores entre datasets diferentes. */
+/**
+ * Compara dos ejecuciones autorizadas sin declarar ganadores.
+ * Las columnas A/B comparten los tokens de color de las líneas: se adaptan a ambos temas.
+ */
 export function RunComparison({ first, second, firstDetail, secondDetail }: Props) {
   const metrics = compareTestMetrics(firstDetail.evaluation, secondDetail.evaluation)
   const loss = buildValidationComparison(firstDetail.epochs, secondDetail.epochs)
@@ -23,11 +26,11 @@ export function RunComparison({ first, second, firstDetail, secondDetail }: Prop
     <div className="flex flex-wrap items-center gap-2"><GitCompareArrows size={20}/><h3 className="text-lg font-semibold">Comparación de dos ejecuciones</h3></div>
     <p className="text-xs text-[var(--muted)]">A: {first.id} · B: {second.id}. Datos leídos de Supabase y protegidos por RLS.</p>
     <div className="overflow-x-auto"><table className="w-full min-w-[360px] text-left text-sm">
-      <thead><tr className="border-b border-[var(--line)]"><th className="p-2">Medida</th><th className="p-2">A · {labels[0]}</th><th className="p-2">B · {labels[1]}</th></tr></thead>
+      <thead><tr className="border-b border-[var(--line)]"><th className="p-2">Medida</th><th className="p-2 font-semibold text-[var(--chart-train)]">A · {labels[0]}</th><th className="p-2 font-semibold text-[var(--chart-validation)]">B · {labels[1]}</th></tr></thead>
       <tbody>
-        <tr className="border-b border-[var(--line)]"><td className="p-2">Épocas confirmadas</td><td className="p-2">{first.completed_epochs}</td><td className="p-2">{second.completed_epochs}</td></tr>
-        <tr className="border-b border-[var(--line)]"><td className="p-2">Backend</td><td className="p-2">{first.backend?.toUpperCase() ?? '—'}</td><td className="p-2">{second.backend?.toUpperCase() ?? '—'}</td></tr>
-        {metrics.map((metric) => <tr key={metric.metric} className="border-b border-[var(--line)] last:border-0"><td className="p-2">{metric.metric}</td><td className="p-2 tabular-nums">{show(metric.first)}</td><td className="p-2 tabular-nums">{show(metric.second)}</td></tr>)}
+        <tr className="border-b border-[var(--line)]"><td className="p-2">Épocas confirmadas</td><td className="p-2 font-medium text-[var(--chart-train)]">{first.completed_epochs}</td><td className="p-2 font-medium text-[var(--chart-validation)]">{second.completed_epochs}</td></tr>
+        <tr className="border-b border-[var(--line)]"><td className="p-2">Backend</td><td className="p-2 font-medium text-[var(--chart-train)]">{first.backend?.toUpperCase() ?? '—'}</td><td className="p-2 font-medium text-[var(--chart-validation)]">{second.backend?.toUpperCase() ?? '—'}</td></tr>
+        {metrics.map((metric) => <tr key={metric.metric} className="border-b border-[var(--line)] last:border-0"><td className="p-2">{metric.metric}</td><td className="p-2 tabular-nums font-medium text-[var(--chart-train)]">{show(metric.first)}</td><td className="p-2 tabular-nums font-medium text-[var(--chart-validation)]">{show(metric.second)}</td></tr>)}
       </tbody>
     </table></div>
     {metrics.length === 0 && <Notice>Una o ambas ejecuciones no tienen evaluación de prueba confirmada. La comparación de test queda incompleta.</Notice>}

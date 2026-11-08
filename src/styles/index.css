@@ -17,7 +17,7 @@
   --accent-secondary: #c3eaf5;
   --accent-ink: #2d2448;
   --chart-train: #8663c7;
-  --chart-validation: #238eae;
+  --chart-validation: #147089; /* Celeste contrastado para texto y línea en tema claro. */
   --hero-bg: linear-gradient(125deg, #ded2f7 0%, #d7eef9 100%);
   --hero-ink: #292440;
   --hero-action-bg: #ffffff;
