@@ -21,38 +21,43 @@ export function readLocalCsv(file: File): Promise<RawTable> {
       reject(new Error(message))
     }
     Papa.parse<string[]>(file, {
-      worker: true,
+      // PapaParse con worker:true presenta fallos en builds de producción de Vite 8.
+      // La lectura por fragmentos (FileReader) funciona sin el Worker interno.
+      worker: false,
+      chunkSize: 256 * 1024,
       header: false,
       skipEmptyLines: 'greedy',
       dynamicTyping: false,
       step(results, parser) {
         if (complete) return
-        if (results.errors.length) {
-          fail(`CSV inválido: ${results.errors[0].message}`)
-          parser.abort()
-          return
-        }
-        const fields = results.data.map((field) => String(field))
-        if (!columns) {
-          columns = fields.map((field) => field.trim())
-          if (columns.length < 2 || columns.length > MAX_CSV_COLUMNS ||
-              columns.some((name) => !name) || new Set(columns).size !== columns.length) {
-            fail('Cabeceras vacías, duplicadas o número de columnas no permitido (2–100).')
-            parser.abort()
+        try {
+          if (results.errors.length) {
+            throw new Error(`CSV inválido: ${results.errors[0].message}`)
           }
-          return
-        }
-        if (fields.length !== columns.length) {
-          fail(`La fila ${rows.length + 2} tiene un número de columnas diferente al encabezado.`)
+          // Una respuesta malformada debe provocar un error visible, nunca un spinner infinito.
+          if (!Array.isArray(results.data)) {
+            throw new Error('El lector CSV devolvió una fila inválida. Vuelve a importar el archivo.')
+          }
+          const fields = results.data.map((field) => String(field))
+          if (!columns) {
+            columns = fields.map((field) => field.trim())
+            if (columns.length < 2 || columns.length > MAX_CSV_COLUMNS ||
+                columns.some((name) => !name) || new Set(columns).size !== columns.length) {
+              throw new Error('Cabeceras vacías, duplicadas o número de columnas no permitido (2–100).')
+            }
+            return
+          }
+          if (fields.length !== columns.length) {
+            throw new Error(`La fila ${rows.length + 2} tiene un número de columnas diferente al encabezado.`)
+          }
+          if (rows.length >= MAX_CSV_ROWS) {
+            throw new Error('El CSV supera el máximo de 50 000 filas de datos.')
+          }
+          rows.push(fields)
+        } catch (cause) {
+          fail(cause instanceof Error ? cause.message : 'No se pudo analizar una fila del CSV.')
           parser.abort()
-          return
         }
-        if (rows.length >= MAX_CSV_ROWS) {
-          fail('El CSV supera el máximo de 50 000 filas de datos.')
-          parser.abort()
-          return
-        }
-        rows.push(fields)
       },
       complete() {
         if (complete) return
