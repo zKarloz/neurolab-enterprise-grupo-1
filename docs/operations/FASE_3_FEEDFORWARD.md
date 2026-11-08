@@ -1,3 +1,8 @@
+> **Estado formal de la Fase 3: CERRADA — 8 de noviembre de 2026.**
+> **Validación comunicada por el equipo:** pruebas locales, prueba RLS con cuentas reales, migración 003, entrenamiento real y persistencia de épocas conformes; funcionamiento comprobado en la web desplegada. Esta aprobación deriva de los resultados reportados por el usuario, no de acceso administrativo remoto de ChatGPT.
+> **Alcance consolidado:** CSV local, preparación reproducible, Feedforward Dense con Web Worker/fallback, métricas reales por época y persistencia RLS de configuraciones, metadatos y ejecuciones en Supabase. No incluye la evaluación de test ni versiones de modelos.
+> **Nota histórica:** las menciones a «pendiente» en las secciones de incrementos siguientes reflejan el estado en que fueron redactadas. Este encabezado documenta el cierre posterior a las pruebas.
+
 # Fase 3 — Feedforward Dense (documentación consolidada)
 
 **Estado:** en progreso. Incremento 1 (CSV y preprocesamiento) validado en navegador; incremento 2 (entrenamiento real) probado con datasets por el usuario; incremento 2.1 (revalidación Auth, recomendación de objetivo y gráficas) verificado en navegador por el usuario; incremento 3 (persistencia Supabase/RLS) preparado y pendiente de migración y pruebas en Vercel. Fase 2 validada y cerrada.

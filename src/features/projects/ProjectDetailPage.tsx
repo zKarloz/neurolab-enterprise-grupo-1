@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Archive, ArrowLeft, Check, FileSpreadsheet, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Archive, ArrowLeft, Check, FileSpreadsheet, ChartNoAxesCombined, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
@@ -52,6 +52,7 @@ export function ProjectDetailPage() {
   const admin = state.status === 'ready' && state.profile.is_platform_admin
   const isResponsible = members.some((member) => member.user_id === currentUserId && member.role === 'responsible')
   const isEngineer = members.some((member) => member.user_id === currentUserId && member.role === 'engineer')
+  const isMember = members.some((member) => member.user_id === currentUserId)
   const canManage = (admin || isResponsible) && project?.status === 'active'
   const currentPage = Math.min(memberPage, Math.max(1, Math.ceil(members.length / MEMBER_PAGE_SIZE)))
   const pageMembers = useMemo(() => members.slice((currentPage - 1) * MEMBER_PAGE_SIZE, currentPage * MEMBER_PAGE_SIZE), [members, currentPage])
@@ -88,6 +89,10 @@ export function ProjectDetailPage() {
       </div>
       <div className="flex flex-wrap gap-3 text-xs"><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">{project.status === 'active' ? 'Proyecto activo' : 'Proyecto archivado'}</span><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Creado {new Date(project.created_at).toLocaleDateString('es-PE')}</span>{admin && !isResponsible && <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Supervisión administrativa</span>}</div>
       {isEngineer && project.status === 'active' && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Dataset local · Fase 3</h2><p className="mt-2 text-sm text-[var(--muted)]">Importa y prepara un CSV sin subir sus filas a Supabase.</p><Link to={`/proyectos/${projectId}/datos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileSpreadsheet size={16}/> Abrir preparador CSV</Link></Surface>}
+      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Evaluación e historial · Fase 4</h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">Consulta las métricas por época y las evaluaciones de prueba confirmadas en Supabase, sin recuperar el CSV.</p>
+        <Link to={`/proyectos/${projectId}/historial`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><ChartNoAxesCombined size={16}/> Abrir historial</Link>
+      </Surface>}
       {error && <Notice tone="error">{error} <button className="ml-2 underline" type="button" onClick={() => void reload()}>Reintentar</button></Notice>}
       {notice && <Notice tone="success">{notice}</Notice>}
       <Surface className="p-5 sm:p-7">

@@ -1,5 +1,6 @@
 import * as tf from '@tensorflow/tfjs'
 import { validateDenseConfig } from '../networks/config.ts'
+import { evaluateBinary, evaluateRegression } from '../evaluation/metrics.ts'
 import type { DenseTrainConfig } from '../networks/config.ts'
 import type { PreparedDataset } from '../preprocessing/types.ts'
 import type { BackendName, EpochMetrics, RuntimeContext, TrainingEvent } from './types.ts'
@@ -149,6 +150,22 @@ export async function trainDenseModel(
     } else if (!final) {
       throw new Error('No se completó ninguna época de entrenamiento.')
     } else {
+      // La predicción sobre test se realiza UNA sola vez, después de fit y sin ajustar pesos.
+      // Los tensores y predicciones permanecen locales; se envían solo métricas agregadas.
+      const xTest = tf.tensor2d(dataset.test.x, [dataset.test.x.length, features])
+      tensors.push(xTest)
+      const prediction = model.predict(xTest)
+      if (Array.isArray(prediction)) throw new Error('La red produjo múltiples salidas inesperadas.')
+      tensors.push(prediction)
+      const predicted = Array.from(await prediction.data(), Number)
+      if (cancelled()) {
+        emit({ type: 'cancelled', epochsCompleted: final.epoch })
+        return
+      }
+      const evaluation = dataset.manifest.problemType === 'binary'
+        ? evaluateBinary(dataset.test.y, predicted)
+        : evaluateRegression(dataset.test.y, predicted)
+      emit({ type: 'evaluation', evaluation })
       emit({ type: 'completed', summary: {
         backend, context, tfjsVersion: tf.version.tfjs,
         durationMs: Math.round(performance.now() - startedAt),

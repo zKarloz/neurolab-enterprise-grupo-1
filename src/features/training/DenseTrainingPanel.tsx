@@ -13,6 +13,9 @@ import type { LocalCsvMetadata } from '../../ml/preprocessing/fileMetadata.ts'
 import { startBrowserTraining } from '../../ml/training/browserSession.ts'
 import type { TrainingSession } from '../../ml/training/browserSession.ts'
 import type { EpochMetrics, TrainingEvent, TrainingSummary } from '../../ml/training/types.ts'
+import type { TestEvaluation } from '../../ml/evaluation/metrics.ts'
+import { persistTestEvaluation } from '../../services/evaluationPersistence.ts'
+import { TestEvaluationCard } from '../evaluation/TestEvaluationCard.tsx'
 import { getProject } from '../../services/projects'
 import { createPersistedRun, finalizeRun, recordBackend, recordEpoch } from '../../services/trainingPersistence.ts'
 import type { FinalRunStatus } from '../../services/trainingPersistence.ts'
@@ -51,6 +54,8 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
   const [backend, setBackend] = useState('')
   const [epochs, setEpochs] = useState<EpochMetrics[]>([])
   const [summary, setSummary] = useState<TrainingSummary | null>(null)
+  const [evaluation, setEvaluation] = useState<TestEvaluation | null>(null)
+  const [evaluationConfirmed, setEvaluationConfirmed] = useState(false)
   const [savedEpochs, setSavedEpochs] = useState(0)
   const [runId, setRunId] = useState('')
   const [syncState, setSyncState] = useState<'idle' | 'pending' | 'confirmed' | 'error'>('idle')
@@ -127,6 +132,13 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
           if (persistence.current === stream) setSavedEpochs(event.metrics.epoch)
         })
         break
+      case 'evaluation':
+        setEvaluation(event.evaluation)
+        queuePersist(stream, async () => {
+          await persistTestEvaluation(stream.id, event.evaluation)
+          if (persistence.current === stream) setEvaluationConfirmed(true)
+        })
+        break
       case 'completed':
         setSummary(event.summary)
         setStatus('completed')
@@ -150,6 +162,8 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
     setBackend('')
     setEpochs([])
     setSummary(null)
+    setEvaluation(null)
+    setEvaluationConfirmed(false)
     setSavedEpochs(0)
     setRunId('')
     setSyncError('')
@@ -207,7 +221,7 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
     <Surface className="space-y-6 p-5 sm:p-7">
       <header className="space-y-2">
         <div className="flex items-center gap-2"><Layers3 size={21} aria-hidden="true" /><h2 className="text-lg font-semibold">Constructor Feedforward Dense</h2></div>
-        <p className="text-sm leading-6 text-[var(--muted)]">Entrenamiento real en este dispositivo. El conjunto de prueba se reserva para la Fase 4. Si sales de esta pantalla, se interrumpe el entrenamiento.</p>
+        <p className="text-sm leading-6 text-[var(--muted)]">Entrenamiento real en este dispositivo. El conjunto de prueba se evalúa una sola vez al terminar, sin modificar los pesos. Si sales de esta pantalla, se interrumpe el entrenamiento.</p>
       </header>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl bg-[var(--surface-muted)] p-4"><p className="text-xs text-[var(--muted)]">Entradas</p><p className="mt-1 text-xl font-semibold">{features}</p></div>
@@ -249,13 +263,14 @@ export function DenseTrainingPanel({ dataset, source, projectId, userId, onPersi
         {epochs.length > 0 && <TrainingMetricsChart epochs={epochs} problemType={dataset.manifest.problemType} />}
         {summary && <Notice tone="success">{summary.epochsCompleted} épocas reales · {summary.durationMs.toLocaleString('es-PE')} ms · {summary.parameters.toLocaleString('es-PE')} parámetros · {summary.backend.toUpperCase()}.</Notice>}
       </div>}
+      {evaluation && <TestEvaluationCard evaluation={evaluation} confirmed={evaluationConfirmed} />}
       {runId && <div className="space-y-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-4" aria-live="polite">
         <p className="text-sm font-semibold">Persistencia en Supabase</p>
         <p className="text-sm">{savedEpochs} / {config.epochs} épocas confirmadas · {syncState === 'confirmed' ? 'Estado final confirmado' : syncState === 'error' ? 'Guardado parcial o fallido' : 'Sincronizando escrituras'}</p>
         <p className="break-all text-xs text-[var(--muted)]">Ejecución: {runId}</p>
         {syncError && <Notice tone="error">{syncError} Las métricas locales pueden diferir de las confirmadas. No cierres la pestaña hasta revisar el problema.</Notice>}
       </div>}
-      <Notice>El CSV permanece local y no se guardan pesos del modelo. Los datos de preparación, la configuración, el backend y cada época confirmada se conservan en Supabase. Si se pierde la red, solo cuentan como guardados los datos confirmados. La evaluación de prueba y el historial completo son de Fase 4.</Notice>
+      <Notice>El CSV permanece local y no se guardan pesos del modelo. Los datos de preparación, la configuración, el backend y cada época confirmada se conservan en Supabase. Si se pierde la red, solo cuentan como guardados los datos confirmados. La evaluación de prueba y el historial se incorporan progresivamente en la Fase 4; los pesos y predicción desde una versión recuperada quedan para Fase 5.</Notice>
     </Surface>
   )
 }

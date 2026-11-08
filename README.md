@@ -98,3 +98,8 @@ Con un proyecto activo y rol **Ingeniero**, abre Proyectos → Detalle → Datas
 ### Fase 3 — Persistencia de Feedforward (incremento 3)
 
 La migración `supabase/migrations/202611080003_feedforward_persistence.sql` agrega datos de arquitecturas, metadatos de CSV y ejecuciones con RLS. Aplicarla **una sola vez** antes de desplegar este frontend. Las filas originales de CSV no se suben. Comprobar `npm run test:persistence` y, con `.env.test.local` y dos cuentas, `npm run test:fase3:live`. Documentación completa dentro del **único archivo** `docs/operations/FASE_3_FEEDFORWARD.md`.
+
+
+## Fase 4 — Evaluación e historial (incremento inicial)
+
+La Fase 3 quedó cerrada tras la validación del equipo. La Fase 4 añade evaluación final sobre test e historial accesible a integrantes desde `Proyectos → Historial`. Antes de desplegar, aplicar la nueva migración `supabase/migrations/202611080004_test_evaluation.sql`, ejecutar `npm run test:evaluation`, `npm run typecheck`, `npm run build` y probar ambos CSV. No se almacenan filas ni modelos hasta las fases correspondientes. Guía única: `docs/operations/FASE_4_EVALUACION_HISTORIAL.md`.

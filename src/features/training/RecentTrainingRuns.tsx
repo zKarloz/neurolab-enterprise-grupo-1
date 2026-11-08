@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Clock3 } from 'lucide-react'
 import { Notice } from '../../components/ui/Notice'
 import { Surface } from '../../components/ui/Surface'
@@ -34,7 +35,8 @@ export function RecentTrainingRuns({ projectId, refresh }: { projectId: string; 
 
   return <Surface className="space-y-4 p-5 sm:p-7">
     <div className="flex items-center gap-2"><Clock3 size={20} aria-hidden="true"/><h2 className="text-lg font-semibold">Ejecuciones guardadas en Supabase</h2></div>
-    <p className="text-sm text-[var(--muted)]">Resumen de verificación: permanece al recargar. El historial detallado y la comparación de métricas se incorporarán en la Fase 4.</p>
+    <p className="text-sm text-[var(--muted)]">Resumen de ejecuciones confirmadas. Para recuperar las gráficas por época y la evaluación final, abre el historial completo del proyecto.</p>
+    <Link to={`/proyectos/${projectId}/historial`} className="inline-flex min-h-11 items-center rounded-xl border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-muted)]">Ver historial completo</Link>
     {loading && <p role="status" className="text-sm">Consultando ejecuciones…</p>}
     {error && <Notice tone="error">{error} Comprueba que ejecutaste la migración de Fase 3.</Notice>}
     {!loading && !error && runs.length === 0 && <p className="text-sm text-[var(--muted)]">Todavía no hay entrenamientos registrados para este proyecto.</p>}

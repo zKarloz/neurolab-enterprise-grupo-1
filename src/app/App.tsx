@@ -7,6 +7,7 @@ import { HomePage } from '../features/home/HomePage'
 import { ProjectsPage } from '../features/projects/ProjectsPage'
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
 import { LocalDatasetPage } from '../features/datasets/LocalDatasetPage'
+import { TrainingHistoryPage } from '../features/evaluation/TrainingHistoryPage'
 import { PageState } from '../components/ui/PageState'
 
 function PrivateRoute() {
@@ -39,6 +40,7 @@ export function App() {
           <Route path="/proyectos" element={<ProjectsPage />} />
           <Route path="/proyectos/:projectId" element={<ProjectDetailPage />} />
           <Route path="/proyectos/:projectId/datos" element={<LocalDatasetPage />} />
+          <Route path="/proyectos/:projectId/historial" element={<TrainingHistoryPage />} />
           <Route path="/" element={<Navigate to="/inicio" replace />} />
         </Route>
       </Route>

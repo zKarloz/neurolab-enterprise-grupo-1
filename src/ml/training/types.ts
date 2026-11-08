@@ -1,5 +1,6 @@
 import type { DenseTrainConfig } from '../networks/config.ts'
 import type { PreparedDataset } from '../preprocessing/types.ts'
+import type { TestEvaluation } from '../evaluation/metrics.ts'
 
 /** Contrato estructurado entre React y el Web Worker; se transportan solamente datos locales. */
 export type RuntimeContext = 'worker' | 'main'
@@ -25,6 +26,7 @@ export type TrainingEvent =
   | { type: 'initializing'; context: RuntimeContext }
   | { type: 'backend'; backend: BackendName; context: RuntimeContext; tfjsVersion: string }
   | { type: 'epoch'; metrics: EpochMetrics }
+  | { type: 'evaluation'; evaluation: TestEvaluation }
   | { type: 'completed'; summary: TrainingSummary }
   | { type: 'cancelled'; epochsCompleted: number }
   | { type: 'error'; message: string }
