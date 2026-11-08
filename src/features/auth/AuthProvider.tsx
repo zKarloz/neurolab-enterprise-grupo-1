@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { PropsWithChildren } from 'react'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import type { AppProfile, AuthState } from '../../types/auth'
+import { signInIdentityChanged, verificationStarted, verificationUnavailable } from './refreshPolicy.ts'
 
 interface AuthContextValue {
   state: AuthState
@@ -23,12 +24,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setState({ status: 'configured_missing' })
       return
     }
-    setState({ status: 'loading' })
+    // No apagar la pantalla ni desmontar el Worker al actualizar el token en segundo plano.
+    setState(verificationStarted)
     try {
-      // getUser verifica la identidad con Auth en vez de confiar solo en la sesión local.
+      // getUser verifica la identidad en Auth. El perfil sigue siendo comprobado contra RLS.
       const { data: identity, error: identityError } = await supabase.auth.getUser()
       if (current !== sequence.current) return
-      if (identityError || !identity.user) {
+      if (identityError) {
+        // Una sesión inválida se descarta, a diferencia de un fallo de red temporal.
+        if (identityError.status === 401 || identityError.status === 403) setState({ status: 'guest' })
+        else setState((previous) => verificationUnavailable(previous, 'No se pudo verificar la sesión.'))
+        return
+      }
+      if (!identity.user) {
         setState({ status: 'guest' })
         return
       }
@@ -39,13 +47,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         .maybeSingle()
       if (current !== sequence.current) return
       if (error) {
-        setState({
-          status: 'unavailable',
-          message: 'No se pudo verificar tu perfil. Revisa la conexión o la migración inicial.',
-        })
+        setState((previous) => verificationUnavailable(previous, 'No se pudo verificar tu perfil. Revisa la conexión.'))
         return
       }
-      // RLS debe ocultar los perfiles inactivos. Sin perfil activo, nunca se entra a la app.
+      // Una cuenta bloqueada pierde la vista privada aun si su JWT todavía es válido.
       if (!data || data.status !== 'active') {
         setState({ status: 'blocked' })
         return
@@ -53,19 +58,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setState({ status: 'ready', user: identity.user, profile: data as AppProfile })
     } catch {
       if (current === sequence.current) {
-        setState({ status: 'unavailable', message: 'No se pudo contactar el servicio de autenticación.' })
+        setState((previous) => verificationUnavailable(previous, 'No se pudo contactar el servicio de autenticación.'))
       }
     }
   }, [])
 
   useEffect(() => {
     if (!supabase) return
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      // Evitar llamadas asíncronas a Supabase dentro del callback de Auth.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // No realizar solicitudes asíncronas a Supabase desde el callback de Auth.
       if (event === 'SIGNED_OUT') {
         sequence.current += 1
         setState({ status: 'guest' })
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (event === 'SIGNED_IN') setState((previous) => signInIdentityChanged(previous, session?.user.id))
         queueMicrotask(() => void refresh())
       }
     })

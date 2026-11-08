@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FileSpreadsheet, ShieldAlert } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
@@ -10,6 +10,7 @@ import { DenseTrainingPanel } from '../training/DenseTrainingPanel'
 import { getProject } from '../../services/projects'
 import { supabase } from '../../lib/supabase'
 import { prepareDataset } from '../../ml/preprocessing/prepare.ts'
+import { analyzeObjective } from '../../ml/preprocessing/targetAnalysis.ts'
 import { MAX_CSV_BYTES, MAX_CSV_ROWS, readLocalCsv } from '../../ml/preprocessing/readCsv.ts'
 import type { PreparedDataset, ProblemType, RawTable } from '../../ml/preprocessing/types.ts'
 
@@ -27,6 +28,7 @@ export function LocalDatasetPage() {
   const [prepared, setPrepared] = useState<PreparedDataset | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const targetAnalysis = useMemo(() => table && target ? analyzeObjective(table, target) : null, [table, target])
 
   const authorize = useCallback(async () => {
     setPermission('loading')
@@ -60,7 +62,9 @@ export function LocalDatasetPage() {
       const parsed = await readLocalCsv(file)
       setTable(parsed)
       setFilename(file.name)
-      setTarget(parsed.columns[parsed.columns.length - 1])
+      const nextTarget = parsed.columns[parsed.columns.length - 1]
+      setTarget(nextTarget)
+      setProblemType(analyzeObjective(parsed, nextTarget).recommended ?? 'binary')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo importar el CSV.')
     } finally { setBusy(false) }
@@ -105,10 +109,14 @@ export function LocalDatasetPage() {
         <h2 className="text-lg font-semibold">Preparación reproducible</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField id="target-column" label="Columna objetivo" value={target} options={table.columns.map((column) => ({ value: column, label: column }))}
-            onChange={(event) => { setTarget(event.target.value); setPrepared(null) }}/>
+            onChange={(event) => { setTarget(event.target.value); setProblemType(analyzeObjective(table, event.target.value).recommended ?? 'binary'); setPrepared(null) }}/>
           <SelectField id="problem-type" label="Problema" value={problemType} options={[{ value: 'binary', label: 'Clasificación binaria' }, { value: 'regression', label: 'Regresión' }]}
             onChange={(event) => { setProblemType(event.target.value as ProblemType); setPrepared(null) }}/>
         </div>
+        {targetAnalysis && <Notice>
+          <strong>Análisis de objetivo:</strong> {targetAnalysis.distinctValues} valores distintos. {targetAnalysis.reason}
+          {targetAnalysis.recommended && targetAnalysis.recommended !== problemType && ' La selección actual es técnicamente posible solo cuando sus valores son compatibles, pero puede no representar bien el problema.'}
+        </Notice>}
         <p className="text-xs text-[var(--muted)]">Partición 70/15/15, semilla 42, estandarización con estadísticas exclusivas de entrenamiento y codificación de categorías.</p>
         <Button type="button" onClick={prepare} disabled={busy}>Validar y preparar</Button>
       </Surface>}

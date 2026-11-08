@@ -16,6 +16,8 @@
   --accent: #d7c8f5;
   --accent-secondary: #c3eaf5;
   --accent-ink: #2d2448;
+  --chart-train: #8663c7;
+  --chart-validation: #238eae;
   --hero-bg: linear-gradient(125deg, #ded2f7 0%, #d7eef9 100%);
   --hero-ink: #292440;
   --hero-action-bg: #ffffff;
@@ -32,6 +34,8 @@
   --accent: #a49abf;
   --accent-secondary: #86abb8;
   --accent-ink: #1b1825;
+  --chart-train: #afa0d1;
+  --chart-validation: #86b6c8;
   /* Excepción solicitada: la tarjeta Punto de partida permanece gris. */
   --hero-bg: #353535;
   --hero-ink: #f4f4f4;

@@ -13,6 +13,7 @@ import { startBrowserTraining } from '../../ml/training/browserSession.ts'
 import type { TrainingSession } from '../../ml/training/browserSession.ts'
 import type { EpochMetrics, TrainingEvent, TrainingSummary } from '../../ml/training/types.ts'
 import { getProject } from '../../services/projects'
+import { TrainingMetricsChart } from './TrainingMetricsChart.tsx'
 
 interface DenseTrainingPanelProps { dataset: PreparedDataset; projectId: string; userId: string }
 type RunStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'cancelled' | 'failed'
@@ -26,7 +27,7 @@ function showMetric(value: number | null): string {
   return value === null ? 'No disponible' : Number(value.toFixed(6)).toLocaleString('es-PE', { maximumFractionDigits: 6 })
 }
 
-/** Diseño mínimo de F3: valores reales por época, sin gráficos ni historial ficticio. */
+/** Vista de F3 con gráfica incremental solicitada: nunca usa métricas ficticias. */
 export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTrainingPanelProps) {
   const [config, setConfig] = useState<DenseTrainConfig>(() => ({ ...DEFAULT_DENSE_CONFIG, hiddenLayers: [...DEFAULT_DENSE_CONFIG.hiddenLayers] }))
   const [status, setStatus] = useState<RunStatus>('idle')
@@ -160,10 +161,10 @@ export function DenseTrainingPanel({ dataset, projectId, userId }: DenseTraining
             [metricLabel + ' train', latest.metric], [metricLabel + ' validación', latest.validationMetric],
           ].map(([label, value]) => <div key={String(label)} className="rounded-xl bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">{label}</p><p className="mt-1 font-semibold tabular-nums">{showMetric(value as number | null)}</p></div>)}
         </div>}
-        {epochs.length > 0 && <div className="text-xs text-[var(--muted)]">Épocas observadas: {epochs.length}. Métricas obtenidas de <code>onEpochEnd</code>, sin simulación.</div>}
+        {epochs.length > 0 && <TrainingMetricsChart epochs={epochs} problemType={dataset.manifest.problemType} />}
         {summary && <Notice tone="success">{summary.epochsCompleted} épocas reales · {summary.durationMs.toLocaleString('es-PE')} ms · {summary.parameters.toLocaleString('es-PE')} parámetros · {summary.backend.toUpperCase()}.</Notice>}
       </div>}
-      <Notice>En este incremento el modelo se libera al finalizar y los resultados permanecen en memoria. La persistencia de ejecuciones se incorporará en el siguiente incremento de Fase 3; las gráficas, evaluación de test e historial corresponden a Fase 4.</Notice>
+      <Notice>En este incremento el modelo se libera al finalizar y los resultados permanecen en memoria. La persistencia de ejecuciones se incorporará en el siguiente incremento de Fase 3; evaluación del conjunto de prueba e historial remoto corresponden a Fase 4.</Notice>
     </Surface>
   )
 }

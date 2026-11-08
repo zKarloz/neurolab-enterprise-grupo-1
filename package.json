@@ -16,7 +16,9 @@
     "test:fase2:live": "node --env-file=.env.test.local scripts/test-fase2-live.mjs",
     "test:preprocessing": "node --experimental-strip-types --test tests/preprocessing.test.mjs",
     "test:network": "node --experimental-strip-types --test tests/network-config.test.mjs",
-    "test:training:runtime": "node --experimental-strip-types --test tests/training.runtime.test.mjs"
+    "test:training:runtime": "node --experimental-strip-types --test tests/training.runtime.test.mjs",
+    "test:auth-refresh": "node --experimental-strip-types --test tests/auth-refresh.test.mjs",
+    "test:target-analysis": "node --experimental-strip-types --test tests/target-analysis.test.mjs"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -28,7 +30,8 @@
     "react-dom": "19.3.1",
     "react-router-dom": "7.18.3",
     "papaparse": "5.7.0",
-    "@tensorflow/tfjs": "4.22.0"
+    "@tensorflow/tfjs": "4.22.0",
+    "recharts": "3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.4",

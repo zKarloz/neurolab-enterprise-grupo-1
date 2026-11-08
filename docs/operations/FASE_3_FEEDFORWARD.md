@@ -1,6 +1,6 @@
 # Fase 3 — Feedforward Dense (documentación consolidada)
 
-**Estado:** en progreso. Incremento 1 (CSV y preprocesamiento) verificado visualmente por usuario Ingeniero; incremento 2 (entrenamiento real) implementado en código, **pendiente de `npm install`, typecheck, build, smoke test real y prueba en Vercel**. Fase 2 validada y cerrada.
+**Estado:** en progreso. Incremento 1 (CSV y preprocesamiento) validado en navegador; incremento 2 (entrenamiento real) probado con datasets por el usuario; incremento 2.1 (revalidación Auth, recomendación de objetivo y gráficas) preparado, pendiente de build y verificación en Vercel. Fase 2 validada y cerrada.
 
 **Base aprobada:** `docs/architecture/FASE_0_DISENO_APROBADO.md`. No existe backend Python, cola de servidor ni importación de CSV completos a Supabase. El Administrador global no hereda el rol Ingeniero.
 
@@ -71,3 +71,49 @@ git push origin main
 - **F5:** modelos privados versionados e inmutables en Storage.
 
 No se declara cerrada F3 hasta completar migraciones/RLS, pruebas, entrenamiento real en el navegador y despliegue.
+
+## 5. Ajustes de experiencia y validación sobre datasets reales (incremento 2.1)
+
+**Motivo:** al regresar desde otra pestaña, Supabase puede emitir `SIGNED_IN` o `TOKEN_REFRESHED`. La implementación previa ponía toda la aplicación en `loading`, desmontando la pantalla de preparación y cancelando el Worker. Esto es un fallo de interfaz, no una obligación de Supabase.
+
+### 5.1 Revalidación de Auth sin destruir el estado local
+
+- `AuthProvider` conserva `ready` mientras verifica en segundo plano la **misma identidad**, manteniendo montadas las rutas privadas y el dataset preparado.
+- Una sesión realmente cerrada, una nueva identidad o una cuenta bloqueada siguen retirando el acceso y desmontando las pantallas privadas.
+- Ante un fallo transitorio de conectividad no se destruye el estado del usuario ya verificado. Las operaciones contra Supabase siguen sujetas a RLS y deben verificar autorización antes de escribir.
+- Al abandonar la ruta de entrenamiento, hacer recarga completa o cerrar el navegador, todavía se pierden el estado y los resultados exclusivamente locales. La persistencia real en Supabase sigue pendiente del siguiente incremento de Fase 3; **no** se copian CSV o pesos a `localStorage`.
+
+### 5.2 Análisis de objetivo con recomendación, sin prohibiciones artificiales
+
+- En `clasificacion_cancer_mama_4_variables.csv` la columna `diagnostico` contiene exclusivamente `0`/`1` (569 filas): clasificación binaria es lo recomendado. Regresión es matemáticamente posible porque los valores son numéricos, pero no es la formulación adecuada para predecir clases.
+- En `regresion_diabetes_4_variables.csv` la columna `progresion` tiene 214 valores numéricos distintos (442 filas): se recomienda regresión, y la clasificación binaria la rechaza al exigir dos clases.
+- `analyzeObjective` calcula cardinalidad y compatibilidad numérica, establece recomendación inicial al importar o cambiar columna y muestra explicación sin sustituir decisiones expresas del usuario.
+- Las restricciones fundamentales de `prepareDataset` permanecen intactas: solo binaria y regresión; no se agregan clasificaciones multicategoría.
+
+### 5.3 Gráficas incrementales con Recharts
+
+- Se incorpora anticipadamente **solo la visualización por época solicitada** de F4 dentro de F3, sin evaluación de test, reportes ni historial remoto.
+- `recharts` se fija en `3.10.1` exactamente, con dos curvas por gráfica (entrenamiento y validación): pérdida y exactitud/MAE.
+- Cada nuevo punto procede únicamente de los mensajes `epoch` de TensorFlow.js `onEpochEnd`; no hay datos simulados ni reescalado artificial de valores. Las gráficas muestran el resultado disponible desde la primera época.
+- Colores lavanda y celeste adaptados a ambos temas y animación breve con `isAnimationActive="auto"` que respeta preferencias de movimiento reducido.
+
+### 5.4 Pruebas y despliegue del parche
+
+En Git Bash, después de sobrescribir **solo** los archivos del ZIP sobre el proyecto existente, ejecutar:
+
+```bash
+npm install
+npm run test:auth-refresh
+npm run test:target-analysis
+npm run test:preprocessing
+npm run test:network
+npm run typecheck
+npm run build
+npm run test:training:runtime
+```
+
+El build integral y el entrenamiento TF.js deben verificarse en el entorno del usuario: el entorno de generación no pudo consultar el registro npm para instalar Recharts ni las demás dependencias. Asegurar que `package-lock.json` se actualiza y se confirma con Git.
+
+Pruebas manuales: importar ambos CSV, confirmar recomendación y aviso; entrenar como Ingeniero, observar las curvas variar con cada época; cambiar a otra pestaña del navegador y volver sin perder CSV ni Worker; cerrar sesión y confirmar que se retira el acceso; verificar el tema oscuro y la animación reducida.
+
+Este incremento **no requiere SQL** y **no cierra la Fase 3**. La prioridad sigue siendo persistir arquitecturas, metadatos y resultados reales con políticas RLS.
