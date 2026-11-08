@@ -37,3 +37,12 @@
 - Procedimiento de alta de primer administrador protegido y repetible **solo tras editar UUID**, fuera de migraciones automáticas.
 - Guía de alta inicial y checklist de pruebas.
 - Proyecto remoto, migración ejecutada y usuario real **todavía pendientes** de conectar Supabase.
+
+
+## Avance posterior informado por el usuario
+
+- Migración SQL y bootstrap del primer Administrador ejecutados, según confirmación del usuario.
+- Creada cuenta real; inicio de sesión y rol «Administrador global» visibles en la web.
+- Se incorporó un verificador en vivo de lectura RLS y un smoke test de rutas Vercel; **no ejecutados contra el proyecto del usuario en este entorno**.
+- Persiste pendiente: pruebas RLS cruzadas, cambio de contraseña, `npm run typecheck`, build local y URL de producción verificada.
+- Guía actualizada: `FASE_1_VALIDACION_Y_DESPLIEGUE.md`.

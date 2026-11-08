@@ -2,7 +2,7 @@
 
 **Fase 1 — Repositorio inicial y maquetado** · Proyecto nuevo conforme al diseño de Fase 0 aprobado el 7 de noviembre de 2026.
 
-> **Estado real:** scaffold y diseño implementados. La instalación, el build, las pruebas de conexión y el despliegue aún deben verificarse con tu proyecto de Supabase y tu entorno npm. **No** se declara cerrada la Fase 1.
+> **Estado reportado (noviembre de 2026):** usuario administrador creado, migración y bootstrap aplicados en Supabase, inicio de sesión y rol administrativo visibles en la web del usuario. **Sin verificación independiente aquí** de RLS cruzado, compilación o despliegue Vercel. La Fase 1 continúa abierta.
 
 ## Funcionalidad incluida
 
@@ -30,7 +30,7 @@ Abrir la dirección que informe Vite. **Node.js requerido:** 22.12 o superior (V
 
 La clave `VITE_SUPABASE_PUBLISHABLE_KEY` es pública (`sb_publishable_...`). **Nunca usar `sb_secret_`, `service_role` o credenciales administrativas en frontend.** El archivo `.env.local` está ignorado por Git.
 
-Para el paso a paso de Auth, SQL, RLS, primer administrador y Vercel ver [Guía de Fase 1](docs/operations/FASE_1_CONFIGURACION.md).
+Para la configuración de Auth y bootstrap ver la [Guía inicial](docs/operations/FASE_1_CONFIGURACION.md). Con el Administrador ya creado, continuar con [Validación de RLS y despliegue en Vercel](docs/operations/FASE_1_VALIDACION_Y_DESPLIEGUE.md). **No volver a ejecutar el bootstrap.**
 
 ## Árbol de carpetas inicial
 
@@ -69,7 +69,7 @@ npm run build           # Requiere npm install
 ## Próximos pasos antes de cerrar la Fase 1
 
 1. Instalar dependencias, generar y versionar `package-lock.json`; corregir incompatibilidades detectadas por compilación.
-2. Configurar Supabase nuevo, desactivar signUp e instalar migración RLS inicial.
-3. Probar sesiones válidas, inválidas, cuentas inactivas y accesos negados.
+2. **Ya realizado por el usuario:** crear Supabase, instalar migración/bootstrap y verificar login Administrador. Revisar que el registro público esté desactivado.
+3. Probar sesiones válidas, inválidas, cuentas inactivas y accesos negados, incluida RLS con dos cuentas.
 4. Desplegar a Vercel y verificar conexión real con URL de producción.
 5. Organizar commit de validación y documentar evidencia de pruebas.
