@@ -5,6 +5,8 @@ import {
   LayoutDashboard, Menu, PanelLeftClose, ShieldCheck, Users, X,
 } from 'lucide-react'
 import { UserMenu } from './UserMenu'
+import { BackButton } from './BackButton'
+import { getBackDestination } from './backNavigation'
 import { useAuth } from '../../features/auth/AuthProvider'
 
 const links = [
@@ -57,6 +59,7 @@ export function AppShell() {
   }
 
   const { section, title } = getNavigationContext(location.pathname)
+  const backDestination = getBackDestination(location.pathname)
   const navigationClass = (isActive: boolean) =>
     `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors ${isActive ? 'bg-[var(--surface-muted)] text-[var(--ink)]' : 'text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]'}`
 
@@ -120,6 +123,8 @@ export function AppShell() {
         <header className="sticky top-0 z-20 flex min-h-[88px] items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--page)]/95 px-5 backdrop-blur sm:px-8 lg:px-12">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <button ref={menuButton} type="button" onClick={() => setOpen(true)} aria-label="Abrir menú" aria-expanded={open} className="shrink-0 rounded-lg p-2 lg:hidden"><Menu size={21} /></button>
+            {/* En móvil el botón queda en el topbar fijo, evitando tapar formularios. */}
+            {backDestination && <BackButton destination={backDestination} className="shrink-0 lg:hidden" />}
             <PanelLeftClose className="hidden size-4 shrink-0 text-[var(--muted)] lg:block" aria-hidden="true" />
             <div className="flex min-w-0 flex-col items-start gap-0.5 text-xs text-[var(--muted)] sm:flex-row sm:items-center sm:gap-2">
               <span className="max-w-full truncate text-[10px] sm:text-xs">{section}</span>
@@ -130,7 +135,18 @@ export function AppShell() {
           <UserMenu displayName={state.profile.display_name} onSignOut={leave} />
         </header>
         {signOutError && <div role="alert" className="border-b border-[var(--line)] bg-[var(--surface-muted)] px-8 py-3 text-sm">No se pudo cerrar la sesión. Inténtalo de nuevo.</div>}
-        <main id="contenido" className="mx-auto w-full max-w-[1240px] p-5 pb-16 sm:p-8 lg:p-12"><Outlet /></main>
+        <main id="contenido" className="mx-auto w-full max-w-[1240px] p-5 pb-16 sm:p-8 lg:p-12">
+          {/* El botón de escritorio ocupa el margen interno izquierdo del layout.
+              Su posición fija permanece visible bajo el topbar durante todo el scroll. */}
+          {backDestination && (
+            <BackButton
+              destination={backDestination}
+              className="fixed top-[136px] z-20 hidden lg:grid"
+              style={{ left: 'max(268px, calc(50vw - 484px))' }}
+            />
+          )}
+          <Outlet />
+        </main>
       </div>
     </div>
   )

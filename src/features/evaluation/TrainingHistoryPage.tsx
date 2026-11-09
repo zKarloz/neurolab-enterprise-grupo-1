@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ClipboardList, GitCompareArrows } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { ClipboardList, GitCompareArrows } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
@@ -119,7 +119,6 @@ export function TrainingHistoryPage() {
   if (permission === 'denied') return <Notice tone="error">No tienes acceso al historial privado de este proyecto.</Notice>
 
   return <div className="space-y-6">
-    <Link to={`/proyectos/${projectId}`} className="inline-flex items-center gap-2 text-sm text-[var(--muted)]"><ArrowLeft size={16}/> Volver al proyecto</Link>
     <header><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M07 · Fase 4 · Evaluación e historial</p>
       <h1 className="mt-3 text-3xl font-semibold">Historial de entrenamientos</h1>
       <p className="mt-2 text-sm text-[var(--muted)]">{projectName} · Datos confirmados en Supabase, sin depender del CSV local.</p>

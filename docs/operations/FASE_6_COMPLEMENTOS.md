@@ -132,3 +132,12 @@ Las versiones de Fase 5 siguen siendo inmutables. La migración `202611090009_mo
 
 El PDF de Reportes ahora utiliza una plantilla independiente de la pantalla interactiva: documento A4 con encabezado institucional, identificación y descripción del proyecto, resumen de totales, arquitecturas, datasets e historial de hasta 200 ejecuciones recientes con métricas de prueba. No incluye cards, iconos, sidebar, botones, CSV originales ni pesos. La exportación sigue verificándose y auditándose mediante record_report_export. La descarga se realiza desde el diálogo de impresión del navegador (Guardar como PDF). No se añade dependencia, SQL ni Edge Function.
 
+<!-- F6-BACK-UI-20261109 -->
+### Mejora de navegación — retroceso contextual y menú de usuario
+
+- **Retroceso**: componente compartido `BackButton`, integrado una sola vez en el layout `AppShell`. En escritorio permanece fijo debajo del topbar (`top: 136px`) en el margen izquierdo del contenido. En móviles se muestra en el topbar fijo para no bloquear los campos o la navegación lateral.
+- **Rutas cubiertas**: detalle de proyecto → proyectos; preparador CSV, historial, modelos y reportes → detalle del proyecto. Se utilizan destinos explícitos, sin navegación basada en el historial del navegador.
+- **Transiciones**: el menú de cuenta cierra con 150 ms de opacidad y desplazamiento vertical sin escalado; respeta la preferencia de reducción de movimiento.
+- **Impresión**: el retroceso queda oculto en la versión formal PDF (`print:hidden`).
+- **Verificación**: `node --experimental-strip-types --test tests/fase6.back-ui.test.mjs`, `npm run typecheck`, `npm run build` y validación visual en `npm run preview`.
+- **Alcance**: no cambia roles, Supabase, historial ni versiones de modelos. El módulo de auditoría de proyecto conserva su navegación anterior hasta revisar su versión actual.

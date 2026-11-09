@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, FileSpreadsheet, ShieldAlert } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { FileSpreadsheet, ShieldAlert } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { SelectField } from '../../components/ui/SelectField'
@@ -92,14 +92,12 @@ export function LocalDatasetPage() {
 
   if (permission === 'loading') return <Surface className="p-8"><p role="status">Verificando el rol de proyecto…</p></Surface>
   if (permission === 'denied') return (
-    <div className="space-y-5"><Link to={`/proyectos/${projectId}`} className="inline-flex items-center gap-2 text-sm"><ArrowLeft size={16}/> Volver al proyecto</Link>
-      <Notice tone="error"><ShieldAlert size={16} className="inline"/> Solo un Ingeniero/analista de IA asignado a este proyecto activo puede utilizar el preparador local.</Notice>
+    <div className="space-y-5"><Notice tone="error"><ShieldAlert size={16} className="inline"/> Solo un Ingeniero/analista de IA asignado a este proyecto activo puede utilizar el preparador local.</Notice>
     </div>
   )
 
   return (
     <div className="space-y-7">
-      <Link to={`/proyectos/${projectId}`} className="inline-flex items-center gap-2 text-sm text-[var(--muted)]"><ArrowLeft size={16}/> Volver al proyecto</Link>
       <header><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M05 · Fase 3 · Preparación local</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Preparar un CSV</h1>
         <p className="mt-3 text-sm text-[var(--muted)]">{projectName} · El CSV se procesa solo en tu navegador y no se sube a Supabase.</p>

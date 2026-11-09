@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, FileText, Printer, Layers, Database, ChartNoAxesCombined, Box } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { Download, FileText, Printer, Layers, Database, ChartNoAxesCombined, Box } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
@@ -94,7 +94,6 @@ export function ProjectReportPage() {
   return <div className="report-printable">
     {/* Vista de pantalla completamente separada del documento imprimible. */}
     <div className="report-screen space-y-6">
-    <Link to={`/proyectos/${projectId}`} className="report-no-print inline-flex items-center gap-2 text-sm text-[var(--muted)]"><ArrowLeft size={16}/> Volver al proyecto</Link>
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M09 · Reportes · Fase 6</p>
         <h1 className="mt-3 text-3xl font-semibold">Ficha y reporte del proyecto</h1>

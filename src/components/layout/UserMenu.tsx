@@ -77,14 +77,15 @@ export function UserMenu({ displayName, onSignOut }: UserMenuProps) {
           <CircleUserRound size={19} strokeWidth={1.8} aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1 truncate">{displayName}</span>
-        <ChevronDown size={15} aria-hidden="true" className={`shrink-0 text-[var(--muted)] transition-transform duration-200 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={15} aria-hidden="true" className={`shrink-0 text-[var(--muted)] transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Mantener montado el panel permite animar tanto apertura como cierre. */}
+      {/* El panel permanece montado: la visibilidad se oculta al terminar la transición.
+           Solo animamos opacidad y traslación para evitar saltos al cerrar. */}
       <div
         id={panelId}
         aria-hidden={!open}
-        className={`absolute right-0 top-[calc(100%+0.65rem)] z-50 w-[min(20rem,calc(100vw-2rem))] origin-top-right rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-xl transition-[opacity,transform,visibility] duration-200 ease-out motion-reduce:transition-none ${open ? 'visible translate-y-0 scale-100 opacity-100' : 'invisible pointer-events-none -translate-y-1 scale-95 opacity-0'}`}
+        className={`absolute right-0 top-[calc(100%+0.65rem)] z-50 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-xl transform-gpu transition-[opacity,transform,visibility] duration-150 motion-reduce:transition-none ${open ? 'visible translate-y-0 opacity-100 ease-out' : 'invisible pointer-events-none -translate-y-1 opacity-0 ease-in'}`}
       >
         <div className="border-b border-[var(--line)] px-3 py-2">
           <p className="truncate text-sm font-semibold" title={displayName}>{displayName}</p>

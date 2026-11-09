@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Archive, ArrowLeft, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Archive, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
@@ -76,13 +76,11 @@ export function ProjectDetailPage() {
 
   if (loading) return <Surface className="p-8"><p role="status" className="text-sm text-[var(--muted)]">Cargando proyecto e integrantes…</p></Surface>
   if (!project) return (
-    <div className="space-y-5"><Link to="/proyectos" className="inline-flex items-center gap-2 text-sm"><ArrowLeft size={16} /> Volver</Link>
-      <Notice tone="error">{error || 'Proyecto no encontrado o no autorizado.'}</Notice></div>
+    <div className="space-y-5"><Notice tone="error">{error || 'Proyecto no encontrado o no autorizado.'}</Notice></div>
   )
 
   return (
     <div className="space-y-7">
-      <Link to="/proyectos" className="inline-flex items-center gap-2 text-sm text-[var(--muted)] hover:text-[var(--ink)]"><ArrowLeft size={17} /> Volver a proyectos</Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M02 · Detalle del proyecto</p><h1 className="mt-3 max-w-3xl break-words text-3xl font-semibold tracking-[-.04em]">{project.name}</h1><p className="mt-3 text-sm text-[var(--muted)]">{project.description || 'Proyecto sin descripción.'}</p></div>
         {canManage && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setEditing(true)}><Pencil size={16} /> Editar</Button><Button variant="outline" onClick={() => setArchiving(true)}><Archive size={16} /> Archivar</Button></div>}
