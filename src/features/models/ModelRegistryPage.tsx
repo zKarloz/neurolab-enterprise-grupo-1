@@ -12,6 +12,7 @@ import { getProject } from '../../services/projects'
 import { downloadModelVersion, listRegisteredModels } from '../../services/modelRegistry'
 import type { RegisteredModel, RegisteredVersion } from '../../services/modelRegistry'
 import { loadDensePredictor } from '../../ml/models/artifacts'
+import { ModelReviewsSection } from './ModelReviewsSection'
 
 const PAGE_SIZE = 8
 
@@ -101,6 +102,7 @@ export function ModelRegistryPage() {
       {busy && <p role="status">Descargando y verificando el modelo…</p>}
       {error && <Notice tone="error">{error}</Notice>}
     </Surface>
+    <ModelReviewsSection projectId={projectId} models={models} versions={versions} />
     {selected && <div className="space-y-4">
       <Notice tone="success"><ShieldCheck size={16} className="inline"/> Versión v{selected.version} cargada con integridad SHA-256 verificada. Los datos de entrada de predicción siguen siendo locales.</Notice>
       <SessionPredictionCard key={selected.id} manifest={selected.preprocessing_manifest}

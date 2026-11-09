@@ -90,3 +90,15 @@ Este incremento no se considera validado hasta comprobar las funciones en el Sup
 - [Seguridad de Supabase Edge Functions](https://supabase.com/docs/guides/functions/auth) y [cabeceras Auth](https://supabase.com/docs/guides/functions/auth-headers).
 - [Variables secretas de Edge Functions](https://supabase.com/docs/guides/functions/secrets).
 - [API Auth Admin](https://supabase.com/docs/reference/javascript/auth-admin-createuser).
+
+## Incremento 2 — M08: revisión y aprobación de modelos
+
+**Estado:** implementado, pendiente de validación real en Supabase y Vercel.
+
+Las versiones de Fase 5 siguen siendo inmutables. La migración `202611090009_model_reviews.sql` crea `model_review_events` (append-only), lectura con RLS por proyecto y el RPC `decide_model_review`, que valida el rol activo `reviewer`, la separación del autor del entrenamiento/publicación, el proyecto activo y las transiciones permitidas.
+
+**Flujo:** `Borrador → Revisado → Aprobado / Rechazado`; solo una versión `Aprobada` puede pasar a `Retirada`. Rechazado y Retirado son terminales. Los cambios son eventos, no modificaciones de la fila `model_versions` ni de los objetos privados. Las decisiones se auditan junto con la inserción en la misma transacción SQL.
+
+**Permisos:** los miembros activos (Responsable, Ingeniero, Revisor y Lector) pueden consultar estados, pero solo el Revisor del mismo proyecto puede decidir. Ser Administrador global no autoriza a decidir sin membresía y rol de Revisor. Nadie revisa una versión propia.
+
+**Pruebas de aceptación pendientes:** confirmar aprobación por Revisor no autor, denegación a Ingeniero/Lector/Admin global sin membresía, bloqueo de autor, transiciones inválidas, retiro de aprobado, persistencia al cerrar sesión y ausencia de cambios en pesos/hash. Probar también proyecto archivado. Las pruebas estructurales no reemplazan estas pruebas en vivo.
