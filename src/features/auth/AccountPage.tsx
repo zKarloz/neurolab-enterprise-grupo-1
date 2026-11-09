@@ -1,53 +1,210 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { CircleUserRound, KeyRound, Mail, Shield, ShieldCheck } from 'lucide-react'
+import { CircleUserRound, KeyRound, Mail, Pencil, Shield, ShieldCheck } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
+import { Modal } from '../../components/ui/Modal'
 import { Notice } from '../../components/ui/Notice'
 import { Surface } from '../../components/ui/Surface'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from './AuthProvider'
+import { normalizeDisplayName } from './profileValidation.ts'
 
+type Feedback = { success: boolean; text: string }
+
+/**
+ * Mi cuenta: el nombre es editable por su propietario, mientras que el correo y
+ * los privilegios permanecen de solo lectura. La contraseña usa el modal común.
+ */
 export function AccountPage() {
-  const { state } = useAuth()
+  const { state, refresh } = useAuth()
+  // null significa «seguir el valor actualizado del perfil»; evita copias obsoletas.
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const [nameBusy, setNameBusy] = useState(false)
+  const [nameFeedback, setNameFeedback] = useState<Feedback | null>(null)
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [feedback, setFeedback] = useState<{success: boolean; text: string} | null>(null)
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordFeedback, setPasswordFeedback] = useState<Feedback | null>(null)
+  const [securityFeedback, setSecurityFeedback] = useState<Feedback | null>(null)
+
   if (state.status !== 'ready') return null
   const { profile } = state
+  const displayName = nameDraft ?? profile.display_name
+  const nameChanged = displayName.trim() !== profile.display_name
+
+  async function updateDisplayName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase || state.status !== 'ready' || nameBusy) return
+
+    const nextName = normalizeDisplayName(nameDraft ?? state.profile.display_name)
+    if (!nextName) {
+      setNameFeedback({ success: false, text: 'Escribe un nombre de 2 a 80 caracteres, sin saltos de línea.' })
+      return
+    }
+    if (nextName === state.profile.display_name) {
+      setNameDraft(null)
+      return
+    }
+
+    setNameBusy(true)
+    setNameFeedback(null)
+    try {
+      // El RPC solo cambia el nombre del usuario autenticado y activo.
+      // Nunca enviamos id, email, estado ni permisos desde el navegador.
+      const { error } = await supabase.rpc('update_my_display_name', { p_display_name: nextName })
+      if (error) throw error
+
+      // Refrescar AuthProvider hace que el nombre cambie también en AppShell.
+      await refresh()
+      setNameDraft(null)
+      setNameFeedback({ success: true, text: 'Tu nombre visible se actualizó correctamente.' })
+    } catch {
+      setNameFeedback({ success: false, text: 'No se pudo actualizar el nombre. Comprueba la conexión e inténtalo de nuevo.' })
+    } finally {
+      setNameBusy(false)
+    }
+  }
+
+  function closePasswordModal() {
+    // No descartar el formulario mientras Supabase realiza una actualización.
+    if (passwordBusy) return
+    setPasswordModalOpen(false)
+    setPassword('')
+    setConfirmation('')
+    setPasswordFeedback(null)
+  }
 
   async function updatePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!supabase || busy) return
+    if (!supabase || passwordBusy) return
     if (password.length < 12) {
-      setFeedback({success:false,text:'La nueva contraseña debe tener por lo menos 12 caracteres.'})
+      setPasswordFeedback({ success: false, text: 'La nueva contraseña debe tener por lo menos 12 caracteres.' })
       return
     }
     if (password !== confirmation) {
-      setFeedback({success:false,text:'Las contraseñas no coinciden.'})
+      setPasswordFeedback({ success: false, text: 'Las contraseñas no coinciden.' })
       return
     }
-    setBusy(true)
-    setFeedback(null)
+
+    setPasswordBusy(true)
+    setPasswordFeedback(null)
+    setSecurityFeedback(null)
     try {
       // Auth gestiona la contraseña; nunca se almacena en public.app_users.
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
       setPassword('')
       setConfirmation('')
-      setFeedback({success:true,text:'Tu contraseña fue actualizada correctamente.'})
+      setPasswordModalOpen(false)
+      setSecurityFeedback({ success: true, text: 'Tu contraseña fue actualizada correctamente.' })
     } catch {
-      setFeedback({success:false,text:'No se pudo actualizar la contraseña. Si Supabase solicita reautenticación, contacta al administrador.'})
-    } finally { setBusy(false) }
+      setPasswordFeedback({ success: false, text: 'No se pudo actualizar la contraseña. Si Supabase solicita reautenticación, contacta al administrador.' })
+    } finally {
+      setPasswordBusy(false)
+    }
   }
 
   return (
-    <div className="space-y-7"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">Configuración personal</p><h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">Mi cuenta</h1><p className="mt-3 text-sm text-[var(--muted)]">Gestiona tus credenciales y consulta el acceso autorizado.</p></div>
-      <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-        <Surface className="p-6 sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-xl bg-[var(--surface-muted)]"><CircleUserRound size={22}/></span><div><h2 className="font-semibold">Perfil</h2><p className="text-xs text-[var(--muted)]">Información de tu identidad</p></div></div><div className="mt-8 space-y-5"><div><p className="text-xs text-[var(--muted)]">Nombre</p><p className="mt-1 text-sm font-medium">{profile.display_name}</p></div><div className="border-t border-[var(--line)] pt-5"><p className="flex items-center gap-2 text-xs text-[var(--muted)]"><Mail size={14}/> Correo electrónico</p><p className="mt-1 break-all text-sm font-medium">{profile.email}</p></div><div className="border-t border-[var(--line)] pt-5"><p className="flex items-center gap-2 text-xs text-[var(--muted)]"><Shield size={14}/> Estado</p><p className="mt-1 text-sm font-medium">Cuenta activa</p></div><div className="border-t border-[var(--line)] pt-5"><p className="flex items-center gap-2 text-xs text-[var(--muted)]"><ShieldCheck size={14}/> Alcance global</p><p className="mt-1 text-sm font-medium">{profile.is_platform_admin ? 'Administrador global' : 'Usuario de la plataforma'}</p><p className="mt-2 text-xs leading-5 text-[var(--muted)]">La administración global no concede acceso automático al contenido técnico privado de otros proyectos.</p></div></div></Surface>
-        <Surface className="p-6 sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-xl bg-[var(--surface-muted)]"><KeyRound size={22}/></span><div><h2 className="font-semibold">Cambiar contraseña</h2><p className="text-xs text-[var(--muted)]">Operación gestionada por Supabase Auth</p></div></div><form onSubmit={(event)=>void updatePassword(event)} className="mt-8 space-y-5"><InputField id="new-password" type="password" autoComplete="new-password" label="Nueva contraseña" value={password} onChange={(event)=>setPassword(event.target.value)} minLength={12} required hint="Utiliza al menos 12 caracteres."/><InputField id="confirm-password" type="password" autoComplete="new-password" label="Confirmar contraseña" value={confirmation} onChange={(event)=>setConfirmation(event.target.value)} minLength={12} required />{feedback && <Notice tone={feedback.success?'success':'error'}>{feedback.text}</Notice>}<Button type="submit" busy={busy} className="w-full">Guardar nueva contraseña</Button></form><p className="mt-5 text-xs leading-5 text-[var(--muted)]">Si no recuerdas tus credenciales, solicita la recuperación al administrador. No hay recuperación por correo habilitada en esta fase.</p></Surface>
+    <div className="space-y-7">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">Configuración personal</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">Mi cuenta</h1>
+        <p className="mt-3 text-sm text-[var(--muted)]">Personaliza tu nombre visible y administra tu contraseña.</p>
       </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+        <Surface className="p-6 sm:p-8">
+          <div className="flex items-center gap-3">
+            <span className="grid size-12 place-items-center rounded-xl bg-[var(--surface-muted)]"><CircleUserRound size={22} aria-hidden="true" /></span>
+            <div><h2 className="font-semibold">Perfil</h2><p className="text-xs text-[var(--muted)]">Información de tu identidad</p></div>
+          </div>
+          <div className="mt-8 space-y-5">
+            <form onSubmit={(event) => void updateDisplayName(event)} className="space-y-3">
+              <InputField
+                id="account-display-name"
+                label="Nombre visible"
+                type="text"
+                autoComplete="name"
+                value={displayName}
+                onChange={(event) => { setNameDraft(event.target.value); setNameFeedback(null) }}
+                minLength={2}
+                maxLength={80}
+                disabled={nameBusy}
+                required
+                hint="De 2 a 80 caracteres. Aparecerá en el encabezado de NeuroLab."
+              />
+              <Button type="submit" busy={nameBusy} disabled={!nameChanged}>
+                <Pencil size={16} aria-hidden="true" /> Guardar nombre
+              </Button>
+              {nameFeedback && <Notice tone={nameFeedback.success ? 'success' : 'error'}>{nameFeedback.text}</Notice>}
+            </form>
+
+            <div className="border-t border-[var(--line)] pt-5">
+              <p className="flex items-center gap-2 text-xs text-[var(--muted)]"><Mail size={14} aria-hidden="true" /> Correo electrónico</p>
+              <p className="mt-1 break-all text-sm font-medium">{profile.email}</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">La dirección de acceso la administra la plataforma.</p>
+            </div>
+            <div className="border-t border-[var(--line)] pt-5">
+              <p className="flex items-center gap-2 text-xs text-[var(--muted)]"><Shield size={14} aria-hidden="true" /> Estado</p>
+              <p className="mt-1 text-sm font-medium">Cuenta activa</p>
+            </div>
+            <div className="border-t border-[var(--line)] pt-5">
+              <p className="flex items-center gap-2 text-xs text-[var(--muted)]"><ShieldCheck size={14} aria-hidden="true" /> Alcance global</p>
+              <p className="mt-1 text-sm font-medium">{profile.is_platform_admin ? 'Administrador global' : 'Usuario de la plataforma'}</p>
+              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">La administración global no concede acceso automático al contenido técnico privado de otros proyectos.</p>
+            </div>
+          </div>
+        </Surface>
+
+        <Surface className="p-6 sm:p-8">
+          <div className="flex items-center gap-3">
+            <span className="grid size-12 place-items-center rounded-xl bg-[var(--surface-muted)]"><KeyRound size={22} aria-hidden="true" /></span>
+            <div><h2 className="font-semibold">Seguridad</h2><p className="text-xs text-[var(--muted)]">Credenciales gestionadas por Supabase Auth</p></div>
+          </div>
+          <p className="mt-8 text-sm leading-6 text-[var(--muted)]">Puedes cambiar tu contraseña desde una ventana segura sin salir de Mi cuenta.</p>
+          <Button className="mt-5" type="button" onClick={() => { setSecurityFeedback(null); setPasswordModalOpen(true) }}>
+            <KeyRound size={17} aria-hidden="true" /> Cambiar contraseña
+          </Button>
+          {securityFeedback && <div className="mt-5"><Notice tone={securityFeedback.success ? 'success' : 'error'}>{securityFeedback.text}</Notice></div>}
+          <p className="mt-6 text-xs leading-5 text-[var(--muted)]">Si no recuerdas tus credenciales, solicita la recuperación al administrador. No hay recuperación por correo habilitada en esta fase.</p>
+        </Surface>
+      </div>
+
+      {/* Modal accesible y reutilizable ya incluido en los componentes compartidos. */}
+      <Modal open={passwordModalOpen} title="Cambiar contraseña" onClose={closePasswordModal}>
+        <form onSubmit={(event) => void updatePassword(event)} className="space-y-5">
+          <InputField
+            id="account-new-password"
+            type="password"
+            autoComplete="new-password"
+            label="Nueva contraseña"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            minLength={12}
+            disabled={passwordBusy}
+            required
+            hint="Utiliza al menos 12 caracteres."
+          />
+          <InputField
+            id="account-confirm-password"
+            type="password"
+            autoComplete="new-password"
+            label="Confirmar contraseña"
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            minLength={12}
+            disabled={passwordBusy}
+            required
+          />
+          {passwordFeedback && <Notice tone={passwordFeedback.success ? 'success' : 'error'}>{passwordFeedback.text}</Notice>}
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button type="button" variant="outline" disabled={passwordBusy} onClick={closePasswordModal}>Cancelar</Button>
+            <Button type="submit" busy={passwordBusy}>Guardar nueva contraseña</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
