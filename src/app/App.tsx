@@ -11,6 +11,8 @@ import { TrainingHistoryPage } from '../features/evaluation/TrainingHistoryPage'
 import { ModelRegistryPage } from '../features/models/ModelRegistryPage'
 import { PageState } from '../components/ui/PageState'
 import { AdminUsersPage } from '../features/administration/AdminUsersPage'
+import { ProjectReportPage } from '../features/reports/ProjectReportPage'
+import { AuditEventsPage } from '../features/administration/AuditEventsPage'
 
 function PrivateRoute() {
   const { state, refresh, signOut } = useAuth()
@@ -51,8 +53,11 @@ export function App() {
           <Route path="/proyectos/:projectId/datos" element={<LocalDatasetPage />} />
           <Route path="/proyectos/:projectId/historial" element={<TrainingHistoryPage />} />
           <Route path="/proyectos/:projectId/modelos" element={<ModelRegistryPage />} />
+          <Route path="/proyectos/:projectId/reportes" element={<ProjectReportPage />} />
+          <Route path="/proyectos/:projectId/auditoria" element={<AuditEventsPage />} />
           <Route element={<AdminRoute />}>
             <Route path="/administracion/usuarios" element={<AdminUsersPage />} />
+            <Route path="/administracion/auditoria" element={<AuditEventsPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/inicio" replace />} />
         </Route>

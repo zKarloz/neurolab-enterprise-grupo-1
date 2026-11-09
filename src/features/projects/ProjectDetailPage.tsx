@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Archive, ArrowLeft, Check, FileSpreadsheet, ChartNoAxesCombined, Database, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Archive, ArrowLeft, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
@@ -96,6 +96,14 @@ export function ProjectDetailPage() {
       {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Modelos privados · Fase 5</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">Versiones inmutables de Feedforward, autorizadas por proyecto. Recupera pesos para inferencia sin CSV.</p>
         <Link to={`/proyectos/${projectId}/modelos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><Database size={16}/> Abrir registro de modelos</Link>
+      </Surface>}
+      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Reportes · Fase 6</h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">Ficha, arquitectura y hasta 200 entrenamientos recientes con exportación autorizada CSV/PDF.</p>
+        <Link to={`/proyectos/${projectId}/reportes`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileText size={16}/> Abrir reportes</Link>
+      </Surface>}
+      {isResponsible && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Auditoría del proyecto</h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">Eventos paginados, filtros y exportación CSV, exclusivos del Responsable.</p>
+        <Link to={`/proyectos/${projectId}/auditoria`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><ClipboardList size={16}/> Ver auditoría</Link>
       </Surface>}
       {error && <Notice tone="error">{error} <button className="ml-2 underline" type="button" onClick={() => void reload()}>Reintentar</button></Notice>}
       {notice && <Notice tone="success">{notice}</Notice>}

@@ -102,3 +102,27 @@ Las versiones de Fase 5 siguen siendo inmutables. La migración `202611090009_mo
 **Permisos:** los miembros activos (Responsable, Ingeniero, Revisor y Lector) pueden consultar estados, pero solo el Revisor del mismo proyecto puede decidir. Ser Administrador global no autoriza a decidir sin membresía y rol de Revisor. Nadie revisa una versión propia.
 
 **Pruebas de aceptación pendientes:** confirmar aprobación por Revisor no autor, denegación a Ingeniero/Lector/Admin global sin membresía, bloqueo de autor, transiciones inválidas, retiro de aprobado, persistencia al cerrar sesión y ausencia de cambios en pesos/hash. Probar también proyecto archivado. Las pruebas estructurales no reemplazan estas pruebas en vivo.
+
+
+### Incremento UX — Navegación, menú de cuenta y estados de carga
+
+- `Spinner` reutilizable, con texto accesible y reducción de movimiento; incorporado inicialmente en validación de sesión y lista de usuarios.
+- Breadcrumb vinculado a las secciones **Espacio de trabajo** y **Administración global**, con módulo actual.
+- Sidebar móvil con apertura/cierre mediante `transform` y opacidad; sin librerías de animación ni temporizadores.
+- Menú único de usuario en el encabezado: **Cuenta**, **Tema** (Claro/Oscuro/Sistema) y **Cerrar sesión**. El modo Claro permanece predeterminado, y Sistema sigue la preferencia del SO en tiempo real.
+- La autenticación, RLS, Edge Functions, SQL, revisión y almacenamiento de modelos no se modifican.
+- Validación pendiente en el equipo: TypeScript, compilación Vite, pruebas de módulos y funcionamiento con teclado y dispositivos móviles.
+
+## Incremento 3 — M09 reportes y M10 auditoría visual
+
+**Alcance:** módulo de reportes por proyecto con ficha, recuentos de arquitectura, metadatos de datasets, historial de ejecución, métricas de test almacenadas, exportación CSV acotada e impresión / guardado PDF del navegador; dos vistas de auditoría filtrable y paginada (proyecto y global).
+
+**Autorización:** el reporte exige membresía técnica vigente en `project_members`. El administrador global NO recibe acceso técnico por defecto. La auditoría de proyecto corresponde a `responsible` y la global al Admin para hechos administrativos autorizados por la política `Auditoria por rol y alcance` de 006. Todas las lecturas conservan RLS. La migración 010 solo añade RPC para registrar una *solicitud* autorizada de exportación; no crea políticas más amplias de SELECT.
+
+**Privacidad y límites:** no se exportan filas originales de CSV, contraseñas, pesos ni tokens. Las vistas consultan hasta 200 ejecuciones recientes y exportan hasta 200 eventos de auditoría filtrados. Los totales de arquitecturas, datasets, entrenamientos y versiones del reporte provienen de `COUNT` exacto. Cuando se superan 200 filas, la exportación no es exhaustiva y así se advierte expresamente. El CSV neutraliza fórmulas de hojas de cálculo. El PDF se obtiene con el diálogo estándar de impresión («Guardar como PDF»). Las métricas fueron calculadas en el cliente; no constituyen certificación del entrenamiento.
+
+**Migración:** `202611090010_reports_audit_exports.sql` (una vez, después de 009). Extiende la lista de acciones del CHECK y crea `record_report_export(uuid,text)` con `SECURITY DEFINER`, `search_path = ''`, autorización desde DB y sin permisos de escritura directos. Los eventos indican solicitud, no descarga completada.
+
+**Verificación:** probar como Ingeniero/Lector un reporte autorizado, como Responsable la auditoría de su proyecto, como Admin auditoría global y denegación del reporte técnico ajeno; exportaciones CSV y PDF; filtros y paginación; cierre de sesión/revocación de membresía; pantalla móvil y ambos temas. Ejecutar antes de publicar `node --experimental-strip-types --test tests/fase6.reporting-audit.test.mjs`, `npm run typecheck`, `npm run build`, y la prueba en vivo (sin escritura) contra Supabase.
+
+**Estado:** incremento pendiente de aceptación funcional en Supabase/Vercel y de revisión de permisos con cuentas diferenciadas. No cerrar Fase 6 por anticipado.
