@@ -1,0 +1,83 @@
+/* La pantalla interactiva permanece intacta; el documento formal solo existe para impresión. */
+@media screen {
+  .nl-report-paper { display: none !important; }
+}
+
+@page {
+  size: A4 portrait;
+  margin: 16mm 15mm 18mm;
+}
+
+@media print {
+  /* Oculta la UI: navegación, cabecera, tarjetas, gráficos y paginación de pantalla. */
+  body:has(.nl-report-paper) aside,
+  body:has(.nl-report-paper) header.sticky,
+  body:has(.nl-report-paper) .report-screen,
+  body:has(.nl-report-paper) .report-no-print { display: none !important; }
+
+  /* Elimina el ancho reservado al menú lateral sin depender de clases Tailwind escapadas. */
+  body:has(.nl-report-paper) div:has(> main#contenido) { padding-left: 0 !important; }
+  body:has(.nl-report-paper) main#contenido {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  body:has(.nl-report-paper),
+  body:has(.nl-report-paper) #root,
+  body:has(.nl-report-paper) #root > div {
+    color: #111 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .nl-report-paper {
+    display: block !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 9.25pt !important;
+    line-height: 1.42 !important;
+    color: #181818 !important;
+    background: #fff !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+  .nl-report-paper *, .nl-report-paper *::before, .nl-report-paper *::after {
+    box-shadow: none !important;
+    background: transparent !important;
+    color: inherit !important;
+  }
+  .nl-paper-header { border-bottom: 1.5pt solid #222; padding-bottom: 9mm; margin-bottom: 7mm; }
+  .nl-paper-brand { font-size: 11pt; letter-spacing: .13em; font-weight: 700; }
+  .nl-paper-brand span { font-size: 8pt; font-weight: 400; margin-left: 3mm; }
+  .nl-paper-eyebrow { margin: 6mm 0 1mm; text-transform: uppercase; font-size: 8pt; letter-spacing: .07em; }
+  .nl-paper-header h1 { font-size: 19pt; letter-spacing: -.02em; font-weight: 700; margin: 0 0 1mm; }
+  .nl-paper-subtitle { font-size: 11pt; margin: 0; }
+  .nl-paper-metadata { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 10mm; margin: 0 0 8mm; }
+  .nl-paper-metadata > div { break-inside: avoid; }
+  .nl-paper-metadata dt { text-transform: uppercase; letter-spacing: .04em; font-size: 7.5pt; color: #555 !important; }
+  .nl-paper-metadata dd { font-size: 9pt; font-weight: 600; margin: 1mm 0 0; }
+  .nl-paper-break { overflow-wrap: anywhere; }
+  .nl-paper-section { margin-top: 7mm; }
+  .nl-paper-section h2 {
+    font-size: 11.5pt; font-weight: 700; margin: 0 0 3mm;
+    padding-bottom: 2mm; border-bottom: .6pt solid #999;
+    break-after: avoid;
+  }
+  .nl-paper-prose { white-space: pre-wrap; overflow-wrap: anywhere; margin: 2mm 0 3mm; }
+  .nl-paper-table { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 2mm 0 3mm; font-size: 8.1pt; }
+  .nl-paper-table thead { display: table-header-group; }
+  .nl-paper-table th { border-bottom: 1pt solid #444; text-align: left; font-weight: 700; padding: 2.1mm 1.7mm; }
+  .nl-paper-table td { border-bottom: .35pt solid #ccc; vertical-align: top; padding: 2mm 1.7mm; overflow-wrap: anywhere; }
+  .nl-paper-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .nl-paper-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+  .nl-paper-summary { max-width: 120mm; }
+  .nl-paper-runs th:nth-child(1) { width: 17%; }
+  .nl-paper-runs th:nth-child(2) { width: 27%; }
+  .nl-paper-runs th:nth-child(3) { width: 15%; }
+  .nl-paper-runs th:nth-child(4) { width: 10%; }
+  .nl-paper-runs th:nth-child(5) { width: 31%; }
+  .nl-paper-secondary { display: block; margin-top: 1mm; color: #555 !important; }
+  .nl-paper-note { font-size: 8pt; color: #555 !important; margin: 1mm 0 2mm; }
+  .nl-paper-methodology p { margin: 2mm 0; font-size: 8.5pt; }
+  .nl-paper-footer { border-top: .5pt solid #888; padding-top: 3mm; margin-top: 9mm; font-size: 8pt; color: #555 !important; }
+}

@@ -10,6 +10,8 @@ import { useAuth } from '../auth/AuthProvider'
 import { loadProjectReport, recordExport } from '../../services/reporting'
 import type { ProjectReportSnapshot } from '../../services/reporting'
 import { saveCsv, toCsv } from '../../ml/reports/csv'
+import { FormalReportDocument } from './FormalReportDocument'
+import './formalReportPrint.css'
 
 const PAGE_SIZE = 10
 const statusNames: Record<string, string> = {
@@ -59,7 +61,7 @@ export function ProjectReportPage() {
       // El servidor verifica permisos de nuevo antes de generar el archivo.
       await recordExport(projectId, format === 'csv' ? 'report_csv' : 'report_pdf')
       if (format === 'pdf') {
-        window.print() // El navegador permite escoger «Guardar como PDF».
+        window.print() // Solo la plantilla formal se muestra al imprimir; no se imprime el módulo.
       } else {
         const rows = data.runs.map((run) => {
           const evaluation = evaluationByRun.get(run.id) ?? {}
@@ -89,9 +91,9 @@ export function ProjectReportPage() {
     { name: 'Entrenamientos', value: data.totals.runs, icon: ChartNoAxesCombined },
     { name: 'Versiones de modelos', value: data.totals.versions, icon: Box },
   ]
-  return <div className="report-printable space-y-6">
-    {/* Ocultar controles y shell al imprimir; los datos permanecen visibles para el PDF. */}
-    <style>{`@media print { aside, header.sticky, nav[aria-label="Navegación principal"], .report-no-print { display:none !important; } .lg\\:pl-\\[264px\\] { padding-left:0!important; } main#contenido { max-width:none!important; padding:0!important; } body { background:white!important; color:black!important; } .report-printable, .report-printable * { color:#111 !important; background-color:transparent !important; box-shadow:none !important; } .report-table { overflow:visible!important; } }`}</style>
+  return <div className="report-printable">
+    {/* Vista de pantalla completamente separada del documento imprimible. */}
+    <div className="report-screen space-y-6">
     <Link to={`/proyectos/${projectId}`} className="report-no-print inline-flex items-center gap-2 text-sm text-[var(--muted)]"><ArrowLeft size={16}/> Volver al proyecto</Link>
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M09 · Reportes · Fase 6</p>
@@ -100,7 +102,7 @@ export function ProjectReportPage() {
       </div>
       <div className="report-no-print flex flex-wrap gap-2">
         <Button type="button" variant="outline" busy={busy} onClick={() => void exportReport('csv')}><Download size={16}/> Exportar CSV</Button>
-        <Button type="button" variant="outline" busy={busy} onClick={() => void exportReport('pdf')}><Printer size={16}/> Imprimir / Guardar PDF</Button>
+        <Button type="button" variant="outline" busy={busy} onClick={() => void exportReport('pdf')}><Printer size={16}/> Exportar PDF formal</Button>
       </div>
     </header>
     {error && <Notice tone="error">{error}</Notice>}
@@ -144,5 +146,7 @@ export function ProjectReportPage() {
       <div className="report-no-print"><Pagination page={page} pageSize={PAGE_SIZE} total={data.runs.length} onPageChange={setPage}/></div>
     </Surface>
     <p className="text-xs text-[var(--muted)]">Informe emitido desde NeuroLab Enterprise · {new Date().toLocaleString('es-PE')}. Las exportaciones autorizadas generan eventos de auditoría de solicitud.</p>
+    </div>
+    <FormalReportDocument data={data} preparedBy={state.status === 'ready' ? state.profile.display_name : 'Usuario autorizado'} />
   </div>
 }

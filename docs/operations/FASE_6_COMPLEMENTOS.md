@@ -126,3 +126,9 @@ Las versiones de Fase 5 siguen siendo inmutables. La migración `202611090009_mo
 **Verificación:** probar como Ingeniero/Lector un reporte autorizado, como Responsable la auditoría de su proyecto, como Admin auditoría global y denegación del reporte técnico ajeno; exportaciones CSV y PDF; filtros y paginación; cierre de sesión/revocación de membresía; pantalla móvil y ambos temas. Ejecutar antes de publicar `node --experimental-strip-types --test tests/fase6.reporting-audit.test.mjs`, `npm run typecheck`, `npm run build`, y la prueba en vivo (sin escritura) contra Supabase.
 
 **Estado:** incremento pendiente de aceptación funcional en Supabase/Vercel y de revisión de permisos con cuentas diferenciadas. No cerrar Fase 6 por anticipado.
+
+
+### Mejora M09: Exportación PDF formal
+
+El PDF de Reportes ahora utiliza una plantilla independiente de la pantalla interactiva: documento A4 con encabezado institucional, identificación y descripción del proyecto, resumen de totales, arquitecturas, datasets e historial de hasta 200 ejecuciones recientes con métricas de prueba. No incluye cards, iconos, sidebar, botones, CSV originales ni pesos. La exportación sigue verificándose y auditándose mediante record_report_export. La descarga se realiza desde el diálogo de impresión del navegador (Guardar como PDF). No se añade dependencia, SQL ni Edge Function.
+
