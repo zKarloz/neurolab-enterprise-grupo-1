@@ -82,20 +82,20 @@ export function ProjectDetailPage() {
   return (
     <div className="space-y-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M02 · Detalle del proyecto</p><h1 className="mt-3 max-w-3xl break-words text-3xl font-semibold tracking-[-.04em]">{project.name}</h1><p className="mt-3 text-sm text-[var(--muted)]">{project.description || 'Proyecto sin descripción.'}</p></div>
+        <div><h1 className="max-w-3xl break-words text-3xl font-semibold tracking-[-.04em]">{project.name}</h1><p className="mt-3 text-sm text-[var(--muted)]">{project.description || 'Proyecto sin descripción.'}</p></div>
         {canManage && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setEditing(true)}><Pencil size={16} /> Editar</Button><Button variant="outline" onClick={() => setArchiving(true)}><Archive size={16} /> Archivar</Button></div>}
       </div>
       <div className="flex flex-wrap gap-3 text-xs"><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">{project.status === 'active' ? 'Proyecto activo' : 'Proyecto archivado'}</span><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Creado {new Date(project.created_at).toLocaleDateString('es-PE')}</span>{admin && !isResponsible && <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Supervisión administrativa</span>}</div>
-      {isEngineer && project.status === 'active' && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Dataset local · Fase 3</h2><p className="mt-2 text-sm text-[var(--muted)]">Importa y prepara un CSV sin subir sus filas a Supabase.</p><Link to={`/proyectos/${projectId}/datos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileSpreadsheet size={16}/> Abrir preparador CSV</Link></Surface>}
-      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Evaluación e historial · Fase 4</h2>
+      {isEngineer && project.status === 'active' && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Dataset local</h2><p className="mt-2 text-sm text-[var(--muted)]">Importa y prepara un CSV sin subir sus filas a Supabase.</p><Link to={`/proyectos/${projectId}/datos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileSpreadsheet size={16}/> Abrir preparador CSV</Link></Surface>}
+      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Evaluación e historial</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">Consulta las métricas por época y las evaluaciones de prueba confirmadas en Supabase, sin recuperar el CSV.</p>
         <Link to={`/proyectos/${projectId}/historial`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><ChartNoAxesCombined size={16}/> Abrir historial</Link>
       </Surface>}
-      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Modelos privados · Fase 5</h2>
+      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Modelos privados</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">Versiones inmutables de Feedforward, autorizadas por proyecto. Recupera pesos para inferencia sin CSV.</p>
         <Link to={`/proyectos/${projectId}/modelos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><Database size={16}/> Abrir registro de modelos</Link>
       </Surface>}
-      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Reportes · Fase 6</h2>
+      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Reportes</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">Ficha, arquitectura y hasta 200 entrenamientos recientes con exportación autorizada CSV/PDF.</p>
         <Link to={`/proyectos/${projectId}/reportes`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileText size={16}/> Abrir reportes</Link>
       </Surface>}

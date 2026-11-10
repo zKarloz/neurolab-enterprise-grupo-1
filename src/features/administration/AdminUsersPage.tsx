@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
 import { Surface } from '../../components/ui/Surface'
+import { Spinner } from '../../components/ui/Spinner'
 import { useAuth } from '../auth/AuthProvider'
 import { createManagedUser, listManagedUsers, resetManagedUserPassword, setManagedUserStatus } from '../../services/adminUsers'
 import type { ManagedUser, UsersPage } from '../../services/adminUsers'
@@ -86,8 +87,8 @@ export function AdminUsersPage() {
   return <div className="space-y-7">
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M10 · Administración · Fase 6</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">Usuarios</h1>
+        
+        <h1 className="text-3xl font-semibold tracking-[-.04em]">Usuarios</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">Cuentas administradas, sin registro público ni correos automáticos. Los privilegios globales no conceden acceso técnico a los proyectos.</p>
       </div>
       <Button type="button" onClick={() => { setError(''); setCreateOpen(true) }}><Plus size={17}/> Crear cuenta</Button>
@@ -95,7 +96,7 @@ export function AdminUsersPage() {
     {error && <Notice tone="error">{error} <button className="ml-2 underline" onClick={() => void reload()}>Reintentar</button></Notice>}
     <Surface className="space-y-4 p-5 sm:p-7">
       <div className="flex items-center gap-2"><Users size={19}/><h2 className="text-lg font-semibold">Cuentas registradas</h2></div>
-      {loading ? <p role="status" className="text-sm text-[var(--muted)]">Consultando usuarios…</p> : !result?.users.length ? <Notice>No existen cuentas en esta página.</Notice> : (
+      {loading ? <Spinner label="Consultando usuarios…" centered className="py-8" /> : !result?.users.length ? <Notice>No existen cuentas en esta página.</Notice> : (
         <div className="overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm">
           <thead><tr className="border-b border-[var(--line)] text-[var(--muted)]"><th className="p-3">Usuario</th><th className="p-3">Estado</th><th className="p-3">Alcance</th><th className="p-3">Acciones</th></tr></thead>
           <tbody>{result.users.map((user) => <tr key={user.id} className="border-b border-[var(--line)] last:border-0">

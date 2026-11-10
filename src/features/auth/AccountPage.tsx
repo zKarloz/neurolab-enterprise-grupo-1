@@ -109,8 +109,7 @@ export function AccountPage() {
   return (
     <div className="space-y-7">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">Configuración personal</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">Mi cuenta</h1>
+        <h1 className="text-3xl font-semibold tracking-[-.04em]">Mi cuenta</h1>
         <p className="mt-3 text-sm text-[var(--muted)]">Personaliza tu nombre visible y administra tu contraseña.</p>
       </div>
 

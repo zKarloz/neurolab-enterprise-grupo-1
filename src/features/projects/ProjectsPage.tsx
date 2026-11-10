@@ -62,8 +62,8 @@ export function ProjectsPage() {
     <div className="space-y-7">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M02 · Proyectos de IA</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">Proyectos</h1>
+          
+          <h1 className="text-3xl font-semibold tracking-[-.04em]">Proyectos</h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted)]">Gestiona proyectos e integrantes autorizados. Los datos se recuperan desde Supabase.</p>
         </div>
         {canCreate && <Button onClick={() => setCreateOpen(true)}><Plus size={17} aria-hidden="true" /> Nuevo proyecto</Button>}

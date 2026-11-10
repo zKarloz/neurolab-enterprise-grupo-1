@@ -21,7 +21,7 @@ export function BackButton({ destination, className = '', style }: BackButtonPro
       aria-label={destination.label}
       title={destination.label}
       style={style}
-      className={`nl-back-button grid size-10 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-sm transition-[background-color,box-shadow] duration-150 hover:bg-[var(--surface-muted)] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] motion-reduce:transition-none print:hidden ${className}`}
+      className={`nl-back-button grid size-10 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-sm transition-[left,background-color,box-shadow] duration-200 hover:bg-[var(--surface-muted)] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] motion-reduce:transition-none print:hidden ${className}`}
     >
       <ArrowLeft size={19} strokeWidth={2} aria-hidden="true" />
     </Link>

@@ -141,3 +141,17 @@ El PDF de Reportes ahora utiliza una plantilla independiente de la pantalla inte
 - **Impresión**: el retroceso queda oculto en la versión formal PDF (`print:hidden`).
 - **Verificación**: `node --experimental-strip-types --test tests/fase6.back-ui.test.mjs`, `npm run typecheck`, `npm run build` y validación visual en `npm run preview`.
 - **Alcance**: no cambia roles, Supabase, historial ni versiones de modelos. El módulo de auditoría de proyecto conserva su navegación anterior hasta revisar su versión actual.
+
+<!-- F6-UI3-20261109 -->
+### Mejoras visuales 3 — navegación contraíble y encabezados limpios
+
+- Se retiraron los rótulos internos de fase/módulo situados sobre los títulos en Inicio, Proyectos, Detalle, CSV, Historial, Modelos, Reportes, Usuarios, Auditoría y Mi cuenta. Se conservan los títulos y las etiquetas funcionales de formularios, acciones y métricas.
+- Inicio ya no muestra la píldora «Fase 2 · Proyectos». Se corrigieron mensajes de bienvenida obsoletos; las funciones existentes no cambian.
+- `Mi cuenta` deja de figurar en el sidebar, pero conserva su ruta protegida `/cuenta` y el acceso exclusivo mediante la opción «Cuenta» del menú de usuario. Su breadcrumb muestra **Configuración personal › Mi cuenta**.
+- El sidebar de escritorio alterna entre 264 px (expandido) y 76 px (solo iconos), con botón inferior para contraer/expandir, etiquetas accesibles y títulos de ayuda. La preferencia se guarda localmente en `neurolab:sidebar-collapsed`; en móvil siempre se presenta expandido dentro del panel lateral.
+- El menú del usuario mantiene una apertura con opacidad y ligero desplazamiento (160 ms). Al cerrar, **solo desvanece** durante 110 ms; las animaciones respetan `prefers-reduced-motion`.
+- El botón de retroceso contextual sigue fijo bajo el topbar. Se reservó un margen interior de 96 px a la izquierda del contenido para evitar que la flecha solape títulos, y sus posiciones responden a ambos anchos del sidebar. En móviles sigue integrado en el topbar.
+- Sin migraciones SQL, nuevas dependencias, cambios de RLS, Edge Functions ni modificaciones a los archivos/versión del modelo.
+- Validación requerida antes de publicar: pruebas UX3, `npm run typecheck`, `npm run build`, `npm run preview` y comprobación en móviles/escritorio (incluido el cambio de ancho persistente, los roles globales y la impresión del PDF formal).
+
+**Estado:** implementación preparada, pendiente de aceptación en Vercel.

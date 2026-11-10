@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { Check, ChevronDown, CircleUserRound, LogOut, Monitor, Moon, Sun, UserRound } from 'lucide-react'
 import { useTheme } from '../../app/ThemeProvider'
 import type { ThemeMode } from '../../app/themePreferences'
+import './userMenuMotion.css'
 
 interface UserMenuProps {
   displayName: string
@@ -80,12 +81,12 @@ export function UserMenu({ displayName, onSignOut }: UserMenuProps) {
         <ChevronDown size={15} aria-hidden="true" className={`shrink-0 text-[var(--muted)] transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* El panel permanece montado: la visibilidad se oculta al terminar la transición.
-           Solo animamos opacidad y traslación para evitar saltos al cerrar. */}
+      {/* La apertura conserva su deslizamiento ligero; el cierre solo desvanece.
+           El panel permanece montado para completar la transición de salida. */}
       <div
         id={panelId}
         aria-hidden={!open}
-        className={`absolute right-0 top-[calc(100%+0.65rem)] z-50 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-xl transform-gpu transition-[opacity,transform,visibility] duration-150 motion-reduce:transition-none ${open ? 'visible translate-y-0 opacity-100 ease-out' : 'invisible pointer-events-none -translate-y-1 opacity-0 ease-in'}`}
+        className={`absolute right-0 top-[calc(100%+0.65rem)] z-50 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-xl ${open ? 'nl-user-menu-opening visible opacity-100' : 'nl-user-menu-closing invisible pointer-events-none opacity-0'}`}
       >
         <div className="border-b border-[var(--line)] px-3 py-2">
           <p className="truncate text-sm font-semibold" title={displayName}>{displayName}</p>

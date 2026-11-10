@@ -119,8 +119,8 @@ export function TrainingHistoryPage() {
   if (permission === 'denied') return <Notice tone="error">No tienes acceso al historial privado de este proyecto.</Notice>
 
   return <div className="space-y-6">
-    <header><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M07 · Fase 4 · Evaluación e historial</p>
-      <h1 className="mt-3 text-3xl font-semibold">Historial de entrenamientos</h1>
+    <header>
+      <h1 className="text-3xl font-semibold">Historial de entrenamientos</h1>
       <p className="mt-2 text-sm text-[var(--muted)]">{projectName} · Datos confirmados en Supabase, sin depender del CSV local.</p>
     </header>
     <Surface className="space-y-4 p-5 sm:p-7">

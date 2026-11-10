@@ -77,7 +77,7 @@ export function ModelRegistryPage() {
   if (permission === 'denied') return <Notice tone="error">Se requiere membresía activa en el proyecto para acceder a sus modelos privados.</Notice>
 
   return <div className="space-y-6">
-    <header className="space-y-2"><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M08 · Fase 5 · Registro de modelos</p>
+    <header className="space-y-2">
       <h1 className="text-3xl font-semibold">Modelos privados</h1>
       <p className="text-sm text-[var(--muted)]">{projectName} · Versiones inmutables, descargadas desde Storage privado bajo RLS.</p>
     </header>

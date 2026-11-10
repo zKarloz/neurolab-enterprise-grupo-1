@@ -95,8 +95,8 @@ export function ProjectReportPage() {
     {/* Vista de pantalla completamente separada del documento imprimible. */}
     <div className="report-screen space-y-6">
     <header className="flex flex-wrap items-end justify-between gap-4">
-      <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M09 · Reportes · Fase 6</p>
-        <h1 className="mt-3 text-3xl font-semibold">Ficha y reporte del proyecto</h1>
+      <div>
+        <h1 className="text-3xl font-semibold">Ficha y reporte del proyecto</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">{data.project.name} · Instantánea de metadatos almacenados en Supabase.</p>
       </div>
       <div className="report-no-print flex flex-wrap gap-2">

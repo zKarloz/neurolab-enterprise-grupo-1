@@ -107,7 +107,6 @@ export function ModelReviewsSection({ projectId, models, versions }: ModelReview
       <span className="grid size-10 place-items-center rounded-xl bg-[var(--surface-muted)]"><ClipboardCheck size={20} aria-hidden="true"/></span>
       <div>
         <h2 className="font-semibold">Revisión y aprobación</h2>
-        <p className="text-xs text-[var(--muted)]">M08 · Fase 6 · Decisiones trazables por versión</p>
       </div>
     </div>
     <p className="text-sm text-[var(--muted)]">

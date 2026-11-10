@@ -88,8 +88,8 @@ export function AuditEventsPage() {
   return <div className="space-y-6">
     {scope && <Link to={`/proyectos/${scope}`} className="inline-flex items-center gap-2 text-sm text-[var(--muted)]"><ArrowLeft size={16}/> Volver al proyecto</Link>}
     <header className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M10 · Seguridad · Fase 6</p>
-        <h1 className="mt-3 text-3xl font-semibold">Auditoría de acciones</h1>
+      <div>
+        <h1 className="text-3xl font-semibold">Auditoría de acciones</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">{scope ? 'Eventos del proyecto: acceso exclusivo al Responsable.' : 'Eventos administrativos globales y de gestión de proyectos.'}</p>
       </div>
       <Button type="button" variant="outline" busy={busy} onClick={() => void exportAudit()}><Download size={16}/> Exportar CSV</Button>

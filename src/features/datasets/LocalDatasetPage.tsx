@@ -98,8 +98,8 @@ export function LocalDatasetPage() {
 
   return (
     <div className="space-y-7">
-      <header><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--muted)]">M05 · Fase 3 · Preparación local</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Preparar un CSV</h1>
+      <header>
+        <h1 className="text-3xl font-semibold tracking-tight">Preparar un CSV</h1>
         <p className="mt-3 text-sm text-[var(--muted)]">{projectName} · El CSV se procesa solo en tu navegador y no se sube a Supabase.</p>
       </header>
       <Surface className="space-y-5 p-5 sm:p-7">
