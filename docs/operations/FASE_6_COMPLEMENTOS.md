@@ -244,3 +244,160 @@ La clasificación distingue al **Administrador global** de los roles por proyect
 Verificación: `node --env-file=.env.test.local scripts/test-fase6-role-matrix-live.mjs`, usando cinco cuentas distintas y un proyecto activo de prueba que incluya los cuatro roles de proyecto. El script valida identidades y membresías, consulta las políticas RLS y comprueba rutas de autorización por RPC con entradas que garantizan rechazo **antes de escribir**, además de la Edge Function administrativa. Cuando no existan registros de ejemplo, informa **OMITIDA**; no da por superado un permiso que no ha podido comprobar. El script no crea, elimina ni modifica proyectos, usuarios, entrenamientos, modelos o revisiones. Las acciones positivas que requieren escritura quedan para validación manual en un proyecto de prueba controlado.
 
 Para no mezclar un fallo de credenciales con un fallo de permisos, las identidades se verifican primero. No se guardan contraseñas ni tokens en los resultados, y las claves de administración no se cargan en el navegador. Este incremento no requiere migraciones SQL nuevas.
+
+<!-- FASE6-RECUPERACION-VERIFICABLE-20261109 -->
+## Incremento final de operación — Respaldo verificable y ensayo aislado
+
+**Estado:** herramientas de respaldo, integridad y recuperación local preparadas. **No afirmar restauración integral aprobada hasta completar un ensayo en un proyecto Supabase separado.**
+
+### Evidencia de seguridad previa
+
+El equipo ejecutó la matriz de cinco roles con **87 comprobaciones correctas, 0 errores y 1 omitida por diseño** (escrituras positivas). Se confirmó el aislamiento técnico del Administrador global sin membresía, y el acceso autorizado a eventos de revisión. Esta evidencia cubre las operaciones comprobadas, no representa una auditoría de seguridad exhaustiva.
+
+### Qué protege cada respaldo
+
+- `database/roles.sql`, `database/schema.sql`, `database/data.sql`: exportaciones lógicas mediante `supabase db dump --remote=...`, con Docker y CLI autenticada. El esquema administrado `auth` y los metadatos de `storage` **no quedan completamente respaldados por este mecanismo**. No basta con estos SQL para restaurar identidades y sesiones.
+- `storage/model-artifacts/`: archivos `model.json` y `weights.bin` privados de versiones confirmadas.
+- `storage/user-avatars/`: fotografías privadas. Se revisan todas las referencias `app_users.avatar_path` encontradas en el dump.
+- `integrity-manifest.json`: SHA-256 y tamaño de cada archivo. Se cotejan las rutas y los SHA-256 de `model_versions` contra la copia de Storage. Este archivo **no es una firma digital**, ni prueba que el respaldo sea recuperable por sí solo.
+- Código Git, SQL de migraciones, configuración Auth/Storage y Edge Function `admin-users`: **se reconstruyen y verifican por separado**, de acuerdo con el mismo commit usado como referencia. No guardar claves en Git.
+
+### Flujo de respaldo (Git Bash)
+
+1. Antes de empezar: confirmar disponibilidad de Docker Desktop, `npx supabase login`, permisos Supabase, y espacio libre. Usar un volumen cifrado para almacenar la copia, que contendrá información sensible; **nunca colocarla dentro del repositorio**.
+2. `node scripts/fase6-backup-snapshot.mjs --source-ref REF`: plan de solo lectura. Verifica el destino propuesto.
+3. `node scripts/fase6-backup-snapshot.mjs --source-ref REF --confirm-source REF --run`: exporta tres SQL y los dos buckets mediante Supabase CLI. Cada destino nuevo es único; en caso de fallo se conserva como **INCOMPLETO**. No borra ni sobrescribe datos remotos.
+4. `node scripts/fase6-verify-snapshot.mjs --snapshot "RUTA" --verify`: vuelve a calcular hashes, comprueba archivos esperados y detecta alteraciones. Si falla, no utilizar el backup. Revisar candidatos a artefactos huérfanos manualmente; no borrarlos automáticamente.
+5. Copiar el respaldo **cifrado** a una ubicación externa y registrar fecha, commit Git, versión CLI y custodio en el registro interno de operaciones (sin credenciales).
+
+**Notas:** `supabase storage cp` es experimental y puede variar con la versión de CLI. Se requiere comprobar los paths reales de cada objeto. La lógica espera `model-artifacts/<proyecto>/<modelo>/<versión>/model.json` y `weights.bin`, con tolerancia a un directorio de bucket adicional. Los SQL dependen de la forma `COPY public.model_versions (...) FROM stdin` generada por `--use-copy`. Si Supabase cambia el formato del dump, el verificador se detiene sin modificar el backup.
+
+### Ensayo de recuperación local
+
+`node scripts/fase6-restore-drill.mjs --snapshot "RUTA" --runtime` copia una versión confirmada a una carpeta externa, valida hashes y carga el modelo con TensorFlow.js para obtener una predicción de prueba con entrada neutra. **No necesita CSV y no toca Supabase**. Produce `resultado-recuperacion.json` con flags `databaseRestored=false`, `authRestored=false`, `storageUploaded=false`: evidencia precisa de que la prueba abarcó artefactos, no todo el servicio.
+
+### Restauración integral: proyecto Supabase SEPARADO
+
+**Solo después de crear una segunda instancia de prueba y comprobar su referencia.** No ejecutar recuperación real en producción para ensayar. Seguir la guía oficial de Supabase (abajo), porque las exportaciones lógicas de CLI omiten objetos administrados `auth`, `storage` y otras configuraciones. Para recuperar datos que referencian identidades (`app_users` → `auth.users`) se debe preservar o mapear explícitamente el **UUID** de cada identidad mediante un procedimiento de migración compatible. Crear cuentas nuevas con el mismo correo **no conserva sus UUID** y podría romper claves foráneas. Los tres SQL no resuelven esto automáticamente; considerar los flujos oficiales «Restore to new project» o duplicación cuando estén disponibles.
+
+1. Crear proyecto o instancia Supabase aislada con credenciales propias, sin enlaces de producción. Revisar extensiones y diferencias de versión PostgreSQL.
+2. Preparar Auth e identidades **sin usar SQL directo sobre `auth.users`** y aplicar las migraciones/políticas del commit correspondiente, incluidas las personalizaciones de `auth` y `storage`, según la guía oficial. Validar funciones y `service_role` únicamente en servidor.
+3. Restaurar el respaldo lógico al destino de prueba por la vía documentada de Supabase, tras resolver dependencias de identidades. Ejecutar SQL **solo contra el proyecto de prueba** y confirmar la URL/conexión manualmente. No se entrega un script que aplique SQL sin validación de destino.
+4. Reponer los archivos privados de Storage por la API/CLI en buckets privados, sin habilitar acceso público ni modificar artefactos de producción. Verificar hashes y que las rutas correspondan a `model_versions`.
+5. Desplegar `admin-users` desde Git, configurar Auth del nuevo proyecto, verificar JWT, probar login, RLS con cinco roles y predicción de un modelo restaurado. Tomar nota de divergencias y corregirlas solo en el entorno de prueba.
+6. Documentar tiempos reales de recuperación (RTO), fecha máxima de datos recuperados (RPO), validación de roles, hashes, resultados y custodia. **No marcar cierre de Fase 6** hasta ensayar la recuperación integral y aprobar la retención.
+
+**Frecuencia de respaldos:** por definir y aprobar según el plan, el crecimiento de Storage y la tolerancia a pérdida de datos. No existe backup automático instalado por este incremento. Evitar retención indefinida de copias locales sin control de acceso.
+
+Fuentes oficiales:
+- https://supabase.com/docs/guides/platform/backups
+- https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore
+- https://supabase.com/docs/guides/storage/management/download-objects
+- https://supabase.com/docs/reference/cli/supabase-storage-cp
+
+<!-- NEUROLAB_FASE6_STORAGE_WINDOWS_RESUME_01 -->
+### Fase 6 · Corrección del respaldo Storage en Windows (incidente 2026-11-10)
+
+- Se corrigió la invocación experimental de `supabase storage cp`: los buckets remotos `ss:///model-artifacts` y `ss:///user-avatars` se descargan al directorio actual `.`, estableciendo como carpeta de trabajo la ubicación local del bucket para evitar pasar `C:\\...` como destino.
+- `--resume RUTA` permite reintentar solo Storage a partir de un snapshot incompleto del mismo proyecto. Rechaza orígenes diferentes, snapshots ya sellados y volcados SQL ausentes. **No vuelve a descargar la base de datos**.
+- El verificador rechaza cualquier snapshot marcado `RESPALDO_INCOMPLETO.txt`, aunque exista un manifiesto. Solo se elimina la marca después de completar el inventario.
+- Los dumps SQL y los objetos Storage no corresponden necesariamente al mismo instante. Reanudar solo si no hubo modificaciones de datos/modelos/avatares desde los volcados; si hubo, realizar un respaldo completo nuevo.
+- La corrección tiene pruebas locales automatizadas, pero la descarga real de Storage y la restauración integral continúan pendientes de validación. No ejecuta cambios en Supabase.
+
+<!-- FASE6-RESTAURACION-LOCAL-DOCKER-20261110 -->
+
+### Incremento F6 · Ensayo aislado de restauración con Docker
+
+**Evidencia anterior:** respaldo verificado, 22 archivos, 7 versiones, 2 posibles huérfanos conservados; un modelo recuperado localmente con SHA-256 correcto e inferencia TensorFlow.js satisfactoria. Matriz de roles: 87 correctas, 1 omisión deliberada, 0 errores. Estos resultados corresponden a pruebas realizadas por el desarrollador.
+
+**Objetivo siguiente:** restaurar el esquema de `public` y `private` en una pila Supabase local recién creada, fuera del repositorio, e inspeccionar tablas y RLS sin afectar producción. Se incorporó `scripts/fase6-local-restore.mjs`, que exige un `project_id` de prefijo `nl_f6_restore_`, inspecciona el contenedor PostgreSQL local real y usa `docker exec` en vez de URLs remotas. Las operaciones de importación van en transacciones individuales; se bloquea la importación de datos si no existen los UUID originales de Auth en el destino.
+
+**Advertencia de recuperación:** `supabase db dump` excluye los esquemas administrados `auth` y `storage` por defecto. `roles.sql`, `schema.sql` y `data.sql` no restauran identidades, contraseñas ni objetos físicos de Storage. Se guardaron los artefactos por separado, pero la recuperación completa de Auth, Storage y configuración sigue sin verificarse y **no se declara probada**. No generar identidades ficticias para falsear la validación.
+
+**Protocolo:** seguir `INSTRUCCIONES_FASE6_ENSAYO_LOCAL.md`; registrar plan, resultado del esquema, reporte de tablas/RLS y las dependencias de Auth/Storage no resueltas. No ejecutar contra el remoto ni aplicar migraciones de producción.
+
+**Estado de cierre:** pendiente validar y documentar el ensayo local, establecer un método real de recuperación de Auth y Storage compatible con la edición gratuita, y aprobar la política de retención. Posteriormente revisar el despliegue rojo en Vercel con el log del build y los archivos exactos del commit.
+
+<!-- FASE6-CIERRE-DOCUMENTAL-20261109 -->
+
+## Acta de validación y cierre documental de Fase 6 — Seguridad, operación y despliegue
+
+**Estado del documento:** validación funcional y de seguridad registrada; **cierre operativo CONDICIONADO**. No equivale a restauración integral comprobada ni a una auditoría de seguridad exhaustiva. **Fecha de consolidación:** 2026-11-09 (America/Lima). Evidencia: resultados de terminal y aceptación funcional proporcionados por el desarrollador; las pruebas externas no fueron reproducidas por quien redacta esta acta.
+
+### A. Referencia del alcance y condición de salida
+
+- **Documento Maestro NeuroLab Enterprise, v1.0, octubre de 2026, §14:** Fase 6 «Endurecimiento y despliegue»: pruebas de seguridad, monitoreo, respaldos y documentación, con **checklist de producción aprobado** como condición de salida.
+- **Documento Maestro §15:** pruebas unitarias, integración, contrato, extremo a extremo, seguridad y recuperación, con distintos niveles de evidencia.
+- **Documento Maestro §18:** un MVP demostrable parte de la familia Feedforward; CNN, RNN y GAN se incorporan y validan progresivamente. **No declarar CNN/RNN/GAN implementadas en esta fase**.
+- **Alcance real del repositorio:** frontend React/TypeScript/Vite, entrenamiento local TensorFlow.js, Supabase Auth, PostgreSQL/RLS, Edge Functions y Storage privado. No afirmar que existe un backend de entrenamiento Python/TensorFlow/Keras o una cola remota de workers si no se ha implementado y verificado.
+
+### B. Registro de evidencias comprobadas
+
+| ID | Control o entrega | Evidencia comunicada por el desarrollador | Resultado / límite |
+|---|---|---|---|
+| F6-E01 | Administración de usuarios y separación de roles | Módulos funcionales validados en Vercel; prueba de cuentas y Edge Function | **Validado funcionalmente** en flujos ensayados; no es auditoría de todos los endpoints |
+| F6-E02 | Autorización por cinco identidades (Admin global, Responsable, Ingeniero, Revisor, Lector) | `node --env-file=.env.test.local scripts/test-fase6-role-matrix-live.mjs` | **87 OK, 1 OMITIDA, 0 errores**; la omisión corresponde a escrituras positivas que el script no ejecuta |
+| F6-E03 | Aislamiento Admin global sin membresía | Nuevo proyecto de prueba sin Admin integrante, con registros de architectures, datasets, training_runs, model_versions y model_review_events | **Acceso técnico bloqueado** para Admin sin membresía en los casos verificados; metadatos e integrantes visibles como corresponde |
+| F6-E04 | Revisión, reportes y auditoría | Flujo de revisión y aprobación ejercitado; auditoría global y de proyecto comprobadas en la matriz | **Validado en los flujos probados**, sin extender la conclusión a operaciones no ensayadas |
+| F6-E05 | Preflight de repositorio y build local | `node scripts/check-fase6-repository.mjs`, `npm run typecheck`, `npm run build` | **4/4 preflight**, TypeScript y Vite compilados en la ejecución reportada |
+| F6-E06 | Respaldo lógico + Storage privado | `node scripts/fase6-verify-snapshot.mjs --verify` sobre el snapshot `2026-11-10T03-37-13-448Z_...` | **22 archivos, 7 versiones** cotejados; **2 posibles objetos huérfanos** por investigar, sin eliminación |
+| F6-E07 | Recuperación de un modelo e inferencia sin CSV | `node --experimental-strip-types scripts/fase6-restore-drill.mjs --runtime` | **SHA-256 correcto; inferencia TensorFlow.js comprobada** en una carpeta aislada |
+| F6-E08 | Publicación web | El desarrollador confirmó que Vercel volvió a estar **en verde** tras la corrección de los componentes de avatar | **Despliegue funcional confirmado por el desarrollador**; registrar ID/commit exactos al formalizar acta |
+
+**Interpretación:** los resultados positivos validan el comportamiento observado, no sustituyen pruebas de recuperación integral, de todas las escrituras autorizadas ni monitoreo automatizado. No incluir secretos, tokens, credenciales, información personal ni contenido de los respaldos en el repositorio o en esta acta.
+
+### C. Riesgos y excepciones operativas pendientes
+
+| ID | Estado | Descripción y consecuencia | Mitigación / criterio para resolver |
+|---|---|---|---|
+| F6-P01 | **ABIERTO — alto** | Las exportaciones `roles.sql`, `schema.sql` y `data.sql` no constituyen una restauración completa de `auth.users`/credenciales, ni de los servicios administrados de Supabase | Procedimiento validado de restauración de identidades originales/UUID y pruebas de login en entorno aislado, o aceptación formal y documentada del riesgo de recreación manual |
+| F6-P02 | **ABIERTO — alto** | No se ha completado una restauración integral de PostgreSQL, Auth, buckets, políticas y Edge Functions | Ensayo aislado reproducible; comprobar registros, identidad/RLS, artefactos privados e inferencia. No afirmar «restauración integral aprobada» antes de hacerlo |
+| F6-P03 | **ABIERTO — medio** | Docker Desktop devolvió `containerd ... meta.db: read-only file system`; el ensayo local se interrumpió antes de restaurar el esquema | Diagnosticar espacio/almacenamiento de Docker/WSL sin borrar imágenes, volúmenes ni el respaldo. Reintentar en un entorno local sano o un destino nuevo, nunca en producción |
+| F6-P04 | **ABIERTO — medio** | Copias externas y retención periódica no se han automatizado ni aprobado; el RPO real depende del último snapshot recuperable | Aprobar la política propuesta más abajo, definir responsable, ejecutar calendario y verificar restauración periódica |
+| F6-P05 | **ABIERTO — medio** | Monitoreo operativo, alertas, RPO/RTO medidos y checklist de incidentes no tienen evidencia suficiente de ejecución | Definir alertas y umbrales, registrar revisión periódica y medir tiempos en una restauración aislada |
+| F6-P06 | **EN REVISIÓN — bajo** | Dos posibles objetos huérfanos en Storage según inventario | Investigar con referencias de modelos y registros; **no eliminar automáticamente** |
+| F6-P07 | **PENDIENTE DE PRUEBA — medio** | La matriz no ejecuta operaciones positivas con escritura | Conservar evidencia de pruebas funcionales de Responsable/Ingeniero/Revisor y sus eventos de auditoría sobre proyecto de prueba |
+
+Los riesgos anteriores no se consideran mitigados solo por haber creado scripts, realizado un respaldo o restablecido el despliegue.
+
+### D. Política de retención propuesta, pendiente de aprobación
+
+Esta es una **propuesta**, no una política vigente ni una automatización instalada.
+
+| Activo | Propuesta | Control requerido |
+|---|---|---|
+| Respaldos verificados | 7 copias diarias + 4 semanales + 3 mensuales (según capacidad y clasificación de datos) | Retener solo snapshots íntegros, con checksum y custodia; nunca borrar la última copia recuperable |
+| Destinos de los respaldos | Al menos dos ubicaciones independientes, una fuera del equipo principal | Almacenamiento cifrado, control de acceso, prueba de lectura y revocación de acceso |
+| Ensayos de recuperación | Como mínimo trimestrales y tras cambios críticos de esquema/Auth/Storage | Registrar fechas, errores, duraciones, versiones y resultados reproducibles |
+| Evidencia de roles / revisiones | Conservación durante la vida del proyecto, sujeta a requisitos legales de privacidad | Sin purga automática antes de política legal/técnica aprobada |
+| Artefactos de modelos confirmados | Preservar hashes y rutas de versiones; retirada lógica no implica borrado físico | Prohibido alterar artefactos publicados; reconciliar huérfanos con criterio documentado |
+| Datos sensibles en logs y respaldo | No copiar secretos a Git; cifrar, restringir y minimizar | Responsable de custodia y revisión de acceso |
+
+**Decisiones por firmar:** custodio del respaldo: `PENDIENTE`; calendario y automatización: `PENDIENTE`; retención aceptada: `PENDIENTE`; tolerancia a pérdida de datos (RPO objetivo): `PENDIENTE`; tiempo máximo de recuperación (RTO objetivo): `PENDIENTE`. No publicar números de RPO/RTO como cumplidos sin medición.
+
+### E. Checklist de producción y acta de decisión
+
+| Criterio de aceptación | Estado documental |
+|---|---|
+| Autenticación, privilegios y bloqueo de roles indebidos probados | **CON EVIDENCIA** — F6-E01 a E04 |
+| Build local y despliegue de Vercel funcional | **CON EVIDENCIA** — F6-E05 y E08 |
+| Respaldo lógico y Storage privado con integridad verificada | **CON EVIDENCIA** — F6-E06 |
+| Inferencia de un modelo recuperado sin CSV | **CON EVIDENCIA** — F6-E07 |
+| Restauración integral aislada de PostgreSQL/Auth/Storage | **PENDIENTE** — F6-P01 a P03 |
+| Monitoreo operativo y alertas probadas | **PENDIENTE** — F6-P05 |
+| Política de retención, custodia y RPO/RTO aprobados | **PENDIENTE** — F6-P04 |
+| Checklist final de producción aprobado | **PENDIENTE DE CONFORMIDAD** |
+
+**Decisión recomendada:** aceptar los incrementos funcionales y la seguridad comprobada de Fase 6 y mantener **pendiente el cierre operativo formal**. No bloquear el trabajo futuro de CNN/RNN/GAN por el fallo del Docker local, pero no marcar la condición de salida del §14 como satisfecha hasta ejecutar los controles pendientes o aprobar sus excepciones explícitamente.
+
+**Conformidad:** responsable técnico: `PENDIENTE`; fecha de aprobación: `PENDIENTE`; commit final publicado: `PENDIENTE`; referencia del despliegue verde: `PENDIENTE`; excepciones aceptadas (ID + justificación + responsable + fecha de revisión): `PENDIENTE`.
+
+### F. Próxima revisión operativa
+
+1. Conservar el snapshot verificado **fuera del repositorio y cifrado**; no borrar los dos candidatos a huérfanos.
+2. Revisar Docker Desktop/WSL de forma no destructiva y repetir ensayo aislado cuando el motor pueda escribir; no ejecutar scripts de restauración contra producción.
+3. Diseñar y probar recuperación compatible de identidades Auth y UUID, políticas de acceso, Edge Functions y objetos privados de Storage.
+4. Aprobar retención, custodia, RPO/RTO y monitoreo; registrar el primer ciclo y el resultado del ensayo.
+5. Adjuntar en esta misma sección la evidencia posterior y solicitar conformidad de producción; luego iniciar CNN → RNN → GAN como fases progresivas.
+
+<!-- /FASE6-CIERRE-DOCUMENTAL-20261109 -->
