@@ -5,6 +5,7 @@ export interface AppProfile {
   id: string
   email: string
   display_name: string
+  avatar_path: string | null
   status: 'active' | 'inactive'
   is_platform_admin: boolean
 }

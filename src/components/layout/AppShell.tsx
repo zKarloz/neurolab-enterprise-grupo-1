@@ -172,7 +172,7 @@ export function AppShell() {
               <span className="truncate font-medium text-[var(--ink)]">{title}</span>
             </div>
           </div>
-          <UserMenu displayName={state.profile.display_name} onSignOut={leave} />
+          <UserMenu userId={state.user.id} displayName={state.profile.display_name} email={state.profile.email} avatarPath={state.profile.avatar_path} onSignOut={leave} />
         </header>
         {signOutError && <div role="alert" className="border-b border-[var(--line)] bg-[var(--surface-muted)] px-8 py-3 text-sm">No se pudo cerrar la sesión. Inténtalo de nuevo.</div>}
         <main id="contenido" className="mx-auto w-full max-w-[1240px] p-5 pb-16 sm:p-8 lg:pl-24 lg:pr-12 lg:pt-12">

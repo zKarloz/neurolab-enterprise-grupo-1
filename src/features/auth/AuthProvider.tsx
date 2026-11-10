@@ -50,7 +50,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
       const { data, error } = await supabase
         .from('app_users')
-        .select('id,email,display_name,status,is_platform_admin')
+        .select('id,email,display_name,avatar_path,status,is_platform_admin')
         .eq('id', identity.user.id)
         .maybeSingle()
       if (current !== sequence.current) return

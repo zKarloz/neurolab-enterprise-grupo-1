@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { CircleUserRound, KeyRound, Mail, Pencil, Shield, ShieldCheck } from 'lucide-react'
+import { ImagePlus, KeyRound, Mail, Pencil, ShieldCheck, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
 import { Notice } from '../../components/ui/Notice'
 import { Surface } from '../../components/ui/Surface'
+import { UserAvatar } from '../../components/ui/UserAvatar'
+import { removeMyAvatar, uploadMyAvatar } from '../../services/userAvatar'
+import { validateAvatarFile } from '../../services/avatarPolicy.ts'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from './AuthProvider'
 import { normalizeDisplayName } from './profileValidation.ts'
@@ -28,6 +31,10 @@ export function AccountPage() {
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [passwordFeedback, setPasswordFeedback] = useState<Feedback | null>(null)
   const [securityFeedback, setSecurityFeedback] = useState<Feedback | null>(null)
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const [avatarFeedback, setAvatarFeedback] = useState<Feedback | null>(null)
 
   if (state.status !== 'ready') return null
   const { profile } = state
@@ -106,6 +113,47 @@ export function AccountPage() {
     }
   }
 
+  function closeAvatarModal() {
+    if (avatarBusy) return
+    setAvatarModalOpen(false)
+    setAvatarFile(null)
+  }
+
+  async function saveAvatar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (state.status !== 'ready' || !avatarFile || avatarBusy) return
+    const error = validateAvatarFile(avatarFile)
+    if (error) { setAvatarFeedback({ success: false, text: error }); return }
+
+    setAvatarBusy(true)
+    setAvatarFeedback(null)
+    try {
+      await uploadMyAvatar(state.user.id, avatarFile, state.profile.avatar_path)
+      // La misma ruta aparece en el encabezado y en Mi cuenta tras refrescar el perfil.
+      await refresh()
+      setAvatarModalOpen(false)
+      setAvatarFile(null)
+      setAvatarFeedback({ success: true, text: 'Tu foto de perfil fue actualizada.' })
+    } catch {
+      setAvatarFeedback({ success: false, text: 'No se pudo guardar la foto. Comprueba los permisos de Storage.' })
+    } finally { setAvatarBusy(false) }
+  }
+
+  async function deleteAvatar() {
+    if (state.status !== 'ready' || !state.profile.avatar_path || avatarBusy) return
+    setAvatarBusy(true)
+    setAvatarFeedback(null)
+    try {
+      await removeMyAvatar(state.profile.avatar_path)
+      await refresh()
+      setAvatarModalOpen(false)
+      setAvatarFile(null)
+      setAvatarFeedback({ success: true, text: 'Tu foto fue retirada. Ahora se muestran tus iniciales.' })
+    } catch {
+      setAvatarFeedback({ success: false, text: 'No se pudo quitar la foto. Inténtalo nuevamente.' })
+    } finally { setAvatarBusy(false) }
+  }
+
   return (
     <div className="space-y-7">
       <div>
@@ -116,9 +164,16 @@ export function AccountPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
         <Surface className="p-6 sm:p-8">
           <div className="flex items-center gap-3">
-            <span className="grid size-12 place-items-center rounded-xl bg-[var(--surface-muted)]"><CircleUserRound size={22} aria-hidden="true" /></span>
-            <div><h2 className="font-semibold">Perfil</h2><p className="text-xs text-[var(--muted)]">Información de tu identidad</p></div>
+            <UserAvatar userId={state.user.id} displayName={profile.display_name} avatarPath={profile.avatar_path} size="lg" />
+            <div className="min-w-0 space-y-2">
+              <h2 className="font-semibold">Perfil</h2>
+              <p className="text-xs text-[var(--muted)]">Información de tu identidad</p>
+              <Button type="button" variant="outline" onClick={() => { setAvatarFeedback(null); setAvatarModalOpen(true) }}>
+                <ImagePlus size={16} aria-hidden="true" /> Cambiar foto
+              </Button>
+            </div>
           </div>
+          {avatarFeedback && <div className="mt-5"><Notice tone={avatarFeedback.success ? 'success' : 'error'}>{avatarFeedback.text}</Notice></div>}
           <div className="mt-8 space-y-5">
             <form onSubmit={(event) => void updateDisplayName(event)} className="space-y-3">
               <InputField
@@ -146,10 +201,6 @@ export function AccountPage() {
               <p className="mt-1 text-xs text-[var(--muted)]">La dirección de acceso la administra la plataforma.</p>
             </div>
             <div className="border-t border-[var(--line)] pt-5">
-              <p className="flex items-center gap-2 text-xs text-[var(--muted)]"><Shield size={14} aria-hidden="true" /> Estado</p>
-              <p className="mt-1 text-sm font-medium">Cuenta activa</p>
-            </div>
-            <div className="border-t border-[var(--line)] pt-5">
               <p className="flex items-center gap-2 text-xs text-[var(--muted)]"><ShieldCheck size={14} aria-hidden="true" /> Alcance global</p>
               <p className="mt-1 text-sm font-medium">{profile.is_platform_admin ? 'Administrador global' : 'Usuario de la plataforma'}</p>
               <p className="mt-2 text-xs leading-5 text-[var(--muted)]">La administración global no concede acceso automático al contenido técnico privado de otros proyectos.</p>
@@ -170,6 +221,36 @@ export function AccountPage() {
           <p className="mt-6 text-xs leading-5 text-[var(--muted)]">Si no recuerdas tus credenciales, solicita la recuperación al administrador. No hay recuperación por correo habilitada en esta fase.</p>
         </Surface>
       </div>
+
+      {/* El archivo permanece solo en memoria hasta pulsar «Guardar foto». */}
+      <Modal open={avatarModalOpen} title="Foto de perfil" onClose={closeAvatarModal}>
+        <form onSubmit={(event) => void saveAvatar(event)} className="space-y-5">
+          <div className="flex items-center gap-4">
+            <UserAvatar userId={state.user.id} displayName={profile.display_name} avatarPath={profile.avatar_path} size="lg" />
+            <p className="text-sm leading-6 text-[var(--muted)]">Elige una foto JPG, PNG o WebP de hasta 2 MiB. Se guardará en un espacio privado de tu cuenta.</p>
+          </div>
+          <label htmlFor="account-avatar-file" className="block text-sm font-medium">Nueva fotografía</label>
+          <input id="account-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" disabled={avatarBusy}
+            className="block w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--surface-muted)] file:px-3 file:py-2"
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null
+              setAvatarFile(file)
+              const message = file ? validateAvatarFile(file) : null
+              setAvatarFeedback(message ? { success: false, text: message } : null)
+            }} />
+          {avatarFile && !validateAvatarFile(avatarFile) && <p className="break-all text-xs text-[var(--muted)]">Seleccionada: {avatarFile.name}</p>}
+          {avatarFeedback && <Notice tone={avatarFeedback.success ? 'success' : 'error'}>{avatarFeedback.text}</Notice>}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Button type="button" variant="ghost" disabled={avatarBusy || !profile.avatar_path} onClick={() => void deleteAvatar()}>
+              <Trash2 size={16} aria-hidden="true" /> Quitar foto
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" disabled={avatarBusy} onClick={closeAvatarModal}>Cancelar</Button>
+              <Button type="submit" busy={avatarBusy} disabled={!avatarFile || Boolean(avatarFile && validateAvatarFile(avatarFile))}>Guardar foto</Button>
+            </div>
+          </div>
+        </form>
+      </Modal>
 
       {/* Modal accesible y reutilizable ya incluido en los componentes compartidos. */}
       <Modal open={passwordModalOpen} title="Cambiar contraseña" onClose={closePasswordModal}>
