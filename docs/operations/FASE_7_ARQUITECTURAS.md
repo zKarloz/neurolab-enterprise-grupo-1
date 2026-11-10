@@ -90,3 +90,18 @@
 
 **Validación:** pruebas automatizadas del importador, carga del archivo `digits-8x8.csv` (1 797 filas) y muestra MNIST 28×28 sintética. La compilación integral y el entrenamiento real en el navegador quedan para la validación del desarrollador.
 <!-- CNN2A_LOCAL_CSV_END -->
+
+<!-- CNN3_EVALUACION_PREDICCION_BEGIN -->
+### CNN-3 — Evaluación multiclase y predicción de imágenes locales
+
+**Alcance:** imágenes monocromas 8×8 (Digits) y 28×28 (MNIST) representadas en CSV local, entre 2 y 10 clases. La arquitectura visual y el entrenamiento siguen siendo CNN-1/CNN-2A. No se modifica Supabase, RLS ni Vercel.
+
+- **Tres particiones reproducibles:** aproximadamente 70 % entrenamiento, 15 % validación y 15 % test por clase (semilla 42). Los índices de test no entran en `model.fit` ni en `validationData`. En clases con solo dos imágenes se garantiza muestra de train y test; si no existe subconjunto de validación suficiente, la operación se rechaza.
+- **Evaluación local:** al terminar el entrenamiento se calculan predicciones softmax sobre test. Se muestran loss (entropía cruzada), accuracy, precisión/recall/F1 macro, tabla por clase, matriz de confusión (filas reales, columnas predichas) y ejemplos de errores/aciertos. No son valores simulados. Esta evaluación se hace sobre datos reservados **del mismo CSV**, no es una certificación de generalización externa.
+- **Inferencia en memoria:** después de entrenar, el modelo continúa disponible en el Worker (o en el fallback principal). Se pueden consultar ejemplos de test o subir PNG/JPG/WebP de hasta 5 MiB. La imagen se centra y redimensiona a la forma del CSV, se convierte a grises y opcionalmente se invierte (por defecto para dígito oscuro sobre fondo claro). Las probabilidades se calculan en el navegador; la imagen no se sube a Supabase.
+- **Vida útil:** el modelo se libera al abandonar el módulo, cargar otro CSV, modificar la arquitectura, reentrenar o cancelar. El historial y almacenamiento de versiones se implementarán en CNN-4.
+- **Restricciones:** clasificador monocromo para dígitos o imágenes 8×8/28×28; imágenes RGB, carpetas ZIP, modelos binarios de alta resolución y datasets independientes quedan para fases posteriores. Las predicciones sobre fotos fuera de la distribución entrenada pueden ser poco fiables.
+- **Control de permisos:** solo Ingeniero de proyecto activo puede iniciar el entrenamiento; los módulos no eluden la membresía de proyecto. No se ejecutan escrituras en base de datos.
+
+**Validaciones locales:** pruebas de partición sin fuga, métricas multiclase, formato de archivos, Worker conservado al completar, rechazo de fallos parciales e instalación segura LF/CRLF. La ejecución completa del modelo y el `npm run build` deberán verificarse en el equipo del desarrollador.
+<!-- CNN3_EVALUACION_PREDICCION_END -->

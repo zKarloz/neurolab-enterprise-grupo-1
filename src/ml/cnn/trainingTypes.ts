@@ -1,6 +1,7 @@
-/** Contrato compartido entre el Worker de CNN y la pantalla React. */
+/** Contrato compartido entre el Worker de CNN, el motor y la pantalla React. */
 import type { CnnConfig } from './architecture.ts'
 import type { LocalImageDataset } from './localImageCsv.ts'
+import type { CnnEvaluation } from './cnnEvaluation.ts'
 
 export interface CnnTrainOptions {
   samples: number
@@ -19,17 +20,22 @@ export interface CnnEpochMetrics {
   validationLoss: number
   validationAccuracy: number
 }
+
 export type CnnTrainingEvent =
-  | { type: 'status'; stage: 'download' | 'prepare' | 'fit'; message: string; backend?: string; trainingCount?: number; validationCount?: number }
+  | { type: 'status'; stage: 'download' | 'prepare' | 'fit' | 'evaluate'; message: string; backend?: string; trainingCount?: number; validationCount?: number; testCount?: number }
   | { type: 'batch'; epoch: number; batch: number; batches: number; epochs: number }
   | { type: 'epoch'; metrics: CnnEpochMetrics }
+  | { type: 'evaluated'; report: CnnEvaluation }
   | { type: 'completed'; durationMs: number; backend: string; epochsCompleted: number }
   | { type: 'cancelled' }
   | { type: 'error'; message: string }
+  | { type: 'prediction'; requestId: number; probabilities: number[] }
+  | { type: 'prediction-error'; requestId: number; message: string }
 
 export type CnnWorkerCommand =
   | { type: 'start'; config: CnnConfig; options: CnnTrainOptions; dataset: LocalImageDataset }
   | { type: 'cancel' }
+  | { type: 'predict'; requestId: number; pixels: Uint8Array }
 
 /** Rechazo preventivo de solicitudes fuera de los límites de memoria establecidos. */
 export function validateCnnTrainOptions(options: CnnTrainOptions) {
@@ -39,7 +45,7 @@ export function validateCnnTrainOptions(options: CnnTrainOptions) {
   if (![0.001, 0.0005].includes(options.learningRate)) throw new Error('Learning rate no admitido.')
 }
 
-/** Las métricas provienen de TensorFlow.js; no se inventan ni se sustituyen por cero. */
+/** Las métricas provienen de TensorFlow.js; no se inventan ni sustituyen por cero. */
 export function readCnnEpochMetrics(epoch: number, logs: Record<string, number | undefined>): CnnEpochMetrics {
   const metrics = {
     epoch,

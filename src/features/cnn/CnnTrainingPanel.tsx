@@ -14,13 +14,14 @@ export interface CnnTrainingDisplay {
   backend: string
   trainingCount: number
   validationCount: number
+  testCount: number
   progress: number
   epochs: CnnEpochMetrics[]
   durationMs?: number
 }
 
 export const EMPTY_CNN_TRAINING: CnnTrainingDisplay = {
-  phase: 'idle', message: '', backend: '', trainingCount: 0, validationCount: 0, progress: 0, epochs: [],
+  phase: 'idle', message: '', backend: '', trainingCount: 0, validationCount: 0, testCount: 0, progress: 0, epochs: [],
 }
 
 export function CnnTrainingPanel({ options, setOptions, display, canTrain, architectureValid, datasetCount, datasetName, onStart, onCancel }: {
@@ -42,7 +43,7 @@ export function CnnTrainingPanel({ options, setOptions, display, canTrain, archi
     <div className="grid gap-4 lg:grid-cols-[.75fr_1.25fr]">
       <Surface className="p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Cpu size={20} /> Entrenamiento con imágenes locales</h2>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">CNN real sobre el CSV cargado. Píxeles normalizados a [0, 1]; validación estratificada, semilla 42.</p>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">CNN real sobre el CSV cargado. Píxeles normalizados a [0, 1]; partición estratificada de entrenamiento/validación/test, semilla 42.</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
           <SelectField label="Muestras del CSV" id="cnn-train-samples" value={String(options.samples)} disabled={running || !canTrain || !datasetCount} options={sampleOptions.map((value) => ({ value: String(value), label: `${value} imágenes` }))} onChange={(event) => setOptions({ ...options, samples: Number(event.target.value) as CnnTrainOptions['samples'] })} />
           <SelectField label="Épocas" id="cnn-train-epochs" value={String(options.epochs)} disabled={running || !canTrain} options={[2,5,10].map((value) => ({ value: String(value), label: String(value) }))} onChange={(event) => setOptions({ ...options, epochs: Number(event.target.value) as CnnTrainOptions['epochs'] })} />
@@ -57,7 +58,7 @@ export function CnnTrainingPanel({ options, setOptions, display, canTrain, archi
         {datasetName && <p className="mt-3 text-xs text-[var(--muted)]">Dataset de esta sesión: {datasetName} · {datasetCount} imágenes</p>}
         {!canTrain && <div className="mt-4"><Notice>Solo un Ingeniero integrante de un proyecto activo puede iniciar un entrenamiento CNN.</Notice></div>}
         {!architectureValid && <div className="mt-4"><Notice tone="error">Corrige la arquitectura en la pestaña Arquitectura antes de entrenar.</Notice></div>}
-        <p className="mt-4 text-xs leading-5 text-[var(--muted)]">CNN-2: la ejecución, las curvas y los pesos permanecen solo durante la sesión. El modelo se libera al terminar. Guardado, evaluación de test y registro en Supabase llegarán en CNN-3/4.</p>
+        <p className="mt-4 text-xs leading-5 text-[var(--muted)]">CNN-3: se reservan imágenes independientes para test. Después de entrenar podrás evaluar y predecir; los pesos se liberarán al salir, cambiar el CSV o cambiar la arquitectura. Guardado e historial en CNN-4.</p>
       </Surface>
       <Surface className="p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Activity size={20} /> Monitor en tiempo real</h2>
@@ -79,12 +80,12 @@ export function CnnTrainingPanel({ options, setOptions, display, canTrain, archi
         </div>
         <dl className="mt-5 space-y-2 text-xs text-[var(--muted)]">
           <div className="flex justify-between gap-2"><dt>Motor</dt><dd className="font-semibold text-[var(--ink)]">{display.backend || 'Pendiente'}</dd></div>
-          <div className="flex justify-between gap-2"><dt>Datos de entrenamiento/validación</dt><dd>{display.trainingCount ? `${display.trainingCount} / ${display.validationCount}` : '—'}</dd></div>
+          <div className="flex justify-between gap-2"><dt>Train / Validación / Test</dt><dd>{display.trainingCount ? `${display.trainingCount} / ${display.validationCount} / ${display.testCount}` : '—'}</dd></div>
           <div className="flex justify-between gap-2"><dt><Timer size={14} className="mr-1 inline"/> Tiempo total</dt><dd>{display.durationMs === undefined ? '—' : `${(display.durationMs / 1000).toFixed(1)} s`}</dd></div>
         </dl>
         {display.phase === 'error' && <div className="mt-4"><Notice tone="error">{display.message}</Notice></div>}
         {display.phase === 'cancelled' && <div className="mt-4"><Notice>Cancelación confirmada; el modelo temporal se ha liberado.</Notice></div>}
-        {display.phase === 'completed' && <div className="mt-4"><Notice tone="success">Se completaron {display.epochs.length} épocas reales. Los resultados no se han almacenado en Supabase.</Notice></div>}
+        {display.phase === 'completed' && <div className="mt-4"><Notice tone="success">Se completaron {display.epochs.length} épocas reales. Puedes abrir Evaluar o Predecir. Todavía no se almacena el modelo en Supabase.</Notice></div>}
       </Surface>
     </div>
     {display.epochs.length > 0 && <Surface className="p-4 sm:p-6"><h2 className="mb-4 text-lg font-semibold">Métricas por época</h2><CnnMetricsChart epochs={display.epochs}/></Surface>}

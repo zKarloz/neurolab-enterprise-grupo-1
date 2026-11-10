@@ -1,14 +1,20 @@
 /**
- * Entrenamiento CNN-2 en memoria con dataset local. Se ejecuta preferentemente dentro del Worker;
- * en navegadores sin Worker se usa el hilo principal con callbacks cooperativos.
- * No persiste datos ni envía imágenes a Supabase.
+ * CNN-3: entrenamiento y evaluación sobre particiones separadas, sin Supabase.
+ * El modelo entrenado se conserva exclusivamente durante la sesión de la página
+ * para poder predecir, y se libera al reiniciar, cambiar datos o abandonar CNN.
  */
 import * as tf from '@tensorflow/tfjs'
 import { describeCnn, type CnnConfig, type CnnInputShape } from './architecture.ts'
-import { splitLocalImageIndices, type LocalImageDataset } from './localImageCsv.ts'
+import { type LocalImageDataset } from './localImageCsv.ts'
+import { computeCnnEvaluation, splitCnnHoldoutIndices, type CnnEvaluation, type CnnTestSample } from './cnnEvaluation.ts'
 import { readCnnEpochMetrics, validateCnnTrainOptions, type CnnTrainingEvent, type CnnTrainOptions } from './trainingTypes.ts'
 
-/** Construye exactamente las mismas capas y dimensiones que el diagrama CNN-1. */
+export interface TrainedCnnRuntime {
+  predict: (pixels: Uint8Array) => Promise<number[]>
+  dispose: () => void
+}
+
+/** Construye las mismas capas y dimensiones mostradas por el diagrama CNN-1. */
 export function buildCnnModel(config: CnnConfig, input: CnnInputShape): tf.Sequential {
   const diagram = describeCnn(config, input)
   if (diagram.errors.length) throw new Error(diagram.errors.join(' '))
@@ -26,12 +32,12 @@ export function buildCnnModel(config: CnnConfig, input: CnnInputShape): tf.Seque
   model.add(tf.layers.dense({ units: input.classes, activation: 'softmax' }))
   if (model.countParams() !== diagram.parameterCount) {
     model.dispose()
-    throw new Error('Las dimensiones o parámetros del motor no coinciden con el diagrama CNN.')
+    throw new Error('Los parámetros del motor no coinciden con el diagrama CNN.')
   }
   return model
 }
 
-/** Crea tensores normalizados y etiquetas one-hot solo para la sesión actual. */
+/** Normaliza imágenes y one-hot únicamente en la memoria de la sesión. */
 function tensorsForPartition(pixels: Uint8Array, labels: Uint8Array, indices: number[], input: CnnInputShape) {
   const area = input.height * input.width * input.channels
   const floats = new Float32Array(indices.length * area)
@@ -47,11 +53,62 @@ function tensorsForPartition(pixels: Uint8Array, labels: Uint8Array, indices: nu
   return { images, targets }
 }
 
-/** El motor libera pesos, métricas y tensores incluso cuando el usuario cancela. */
+/** Predice una única imagen en forma y rango idénticos a entrenamiento. */
+async function predictPixels(model: tf.Sequential, pixels: Uint8Array, input: CnnInputShape): Promise<number[]> {
+  const area = input.height * input.width * input.channels
+  if (pixels.length !== area) throw new Error(`La imagen debe contener ${area} píxeles normalizados.`)
+  const floats = Float32Array.from(pixels, (value) => value / 255)
+  const tensor = tf.tensor4d(floats, [1, input.height, input.width, input.channels])
+  let output: tf.Tensor | null = null
+  try {
+    output = model.predict(tensor) as tf.Tensor
+    const values = Array.from(await output.data())
+    if (values.length !== input.classes || values.some((n) => !Number.isFinite(n))) {
+      throw new Error('La CNN devolvió probabilidades inválidas.')
+    }
+    return values
+  } finally { tensor.dispose(); output?.dispose() }
+}
+
+/** Evalúa solo el conjunto test que nunca participa en fit ni validación. */
+async function evaluateCnn(
+  model: tf.Sequential, dataset: LocalImageDataset, input: CnnInputShape,
+  pixels: Uint8Array, labels: Uint8Array, indices: number[],
+): Promise<CnnEvaluation> {
+  const area = input.height * input.width * input.channels
+  const examples = indices.map((index) => pixels.slice(index * area, (index + 1) * area))
+  const testBatch = tensorsForPartition(pixels, labels, indices, input)
+  let output: tf.Tensor | null = null
+  try {
+    output = model.predict(testBatch.images) as tf.Tensor
+    const values = await output.data()
+    const probabilities = indices.map((_, index) => Array.from(values.slice(index * input.classes, (index + 1) * input.classes)))
+    const actual = indices.map((index) => labels[index])
+    const result = computeCnnEvaluation(dataset.classNames, actual, probabilities)
+    // 18 casos de referencia, priorizando errores; sin almacenar todo el CSV.
+    const selected = indices.map((index, position): CnnTestSample => ({
+      index, actual: actual[position], predicted: result.predictions[position].predicted,
+      confidence: result.predictions[position].confidence, pixels: examples[position], probabilities: probabilities[position],
+    }))
+    const failures = selected.filter((item) => item.actual !== item.predicted)
+    const successes = selected.filter((item) => item.actual === item.predicted)
+    return {
+      classNames: [...dataset.classNames], sampleCount: result.sampleCount, loss: result.loss,
+      accuracy: result.accuracy, macroPrecision: result.macroPrecision,
+      macroRecall: result.macroRecall, macroF1: result.macroF1,
+      matrix: result.matrix, classes: result.classes,
+      examples: [...failures.slice(0, 12), ...successes.slice(0, 6)],
+    }
+  } finally {
+    testBatch.images.dispose(); testBatch.targets.dispose(); output?.dispose()
+  }
+}
+
+/** Devuelve el modelo disponible para inferencia solo si finalizó correctamente. */
 export async function trainCnnModel(
   config: CnnConfig, options: CnnTrainOptions, emit: (event: CnnTrainingEvent) => void,
   cancelled: () => boolean, signal: AbortSignal, environment: 'worker' | 'main', dataset: LocalImageDataset,
-): Promise<void> {
+): Promise<TrainedCnnRuntime | null> {
   validateCnnTrainOptions(options)
   const input: CnnInputShape = { width: dataset.width, height: dataset.height, channels: dataset.channels, classes: dataset.classNames.length }
   if (describeCnn(config, input).errors.length) throw new Error('Arquitectura CNN inválida para el dataset seleccionado.')
@@ -61,26 +118,25 @@ export async function trainCnnModel(
   let train: ReturnType<typeof tensorsForPartition> | null = null
   let validation: ReturnType<typeof tensorsForPartition> | null = null
   let epochsCompleted = 0
+  let keepModel = false
   try {
     if (environment === 'worker') await tf.setBackend('cpu')
     await tf.ready()
     const backend = tf.getBackend()
-    if (cancelled()) { emit({ type: 'cancelled' }); return }
+    if (cancelled() || signal.aborted) { emit({ type: 'cancelled' }); return null }
     emit({ type: 'status', stage: 'prepare', message: 'Preparando imágenes locales…', backend })
-    if (signal.aborted) { emit({ type: 'cancelled' }); return }
-    // Se trabaja solo con la cantidad elegida; el archivo original nunca se envía al servidor.
-    const area = input.height * input.width
+    const area = input.height * input.width * input.channels
     const pixels = dataset.pixels.subarray(0, area * options.samples)
     const labels = dataset.labels.subarray(0, options.samples)
-    emit({ type: 'status', stage: 'prepare', message: 'Normalizando píxeles y separando entrenamiento/validación…', backend })
-    const split = splitLocalImageIndices(labels, input.classes, 42)
+    const split = splitCnnHoldoutIndices(labels, input.classes, 42)
     train = tensorsForPartition(pixels, labels, split.train, input)
     validation = tensorsForPartition(pixels, labels, split.validation, input)
-    if (cancelled()) { emit({ type: 'cancelled' }); return }
+    if (cancelled() || signal.aborted) { emit({ type: 'cancelled' }); return null }
     model = buildCnnModel(config, input)
     model.compile({ optimizer: tf.train.adam(options.learningRate), loss: 'categoricalCrossentropy', metrics: ['accuracy'] })
     const batches = Math.ceil(split.train.length / options.batchSize)
-    emit({ type: 'status', stage: 'fit', message: 'Entrenamiento real en progreso…', backend, trainingCount: split.train.length, validationCount: split.validation.length })
+    emit({ type: 'status', stage: 'fit', message: 'Entrenamiento real en progreso…', backend,
+      trainingCount: split.train.length, validationCount: split.validation.length, testCount: split.test.length })
     await model.fit(train.images, train.targets, {
       epochs: options.epochs, batchSize: options.batchSize, validationData: [validation.images, validation.targets],
       shuffle: true, verbose: 0, yieldEvery: 'batch',
@@ -90,7 +146,7 @@ export async function trainCnnModel(
           if (batch % 3 === 0 || batch + 1 === batches) {
             emit({ type: 'batch', epoch: epochsCompleted + 1, batch: batch + 1, batches, epochs: options.epochs })
           }
-          // Permite que el hilo principal/Worker procese el mensaje de cancelación.
+          // Cede el hilo para permitir cancelar una sesión extensa.
           await new Promise<void>((resolve) => setTimeout(resolve, 0))
           if (cancelled() && model) model.stopTraining = true
         },
@@ -101,14 +157,26 @@ export async function trainCnnModel(
         },
       },
     })
-    if (cancelled()) emit({ type: 'cancelled' })
-    else emit({ type: 'completed', durationMs: Date.now() - started, backend, epochsCompleted })
+    if (cancelled() || signal.aborted) { emit({ type: 'cancelled' }); return null }
+    emit({ type: 'status', stage: 'evaluate', message: 'Evaluando imágenes que no participaron en el entrenamiento…', backend })
+    const report = await evaluateCnn(model, dataset, input, pixels, labels, split.test)
+    if (cancelled() || signal.aborted) { emit({ type: 'cancelled' }); return null }
+    emit({ type: 'evaluated', report })
+    // Se conserva el modelo en el entorno donde entrenó, no en Supabase.
+    const retained = model
+    keepModel = true
+    emit({ type: 'completed', durationMs: Date.now() - started, backend, epochsCompleted })
+    return {
+      predict: (image) => predictPixels(retained, image, input),
+      dispose: () => retained.dispose(),
+    }
   } catch (error) {
     if (cancelled() || signal.aborted) emit({ type: 'cancelled' })
     else emit({ type: 'error', message: error instanceof Error ? error.message : 'Error desconocido entrenando CNN.' })
+    return null
   } finally {
     train?.images.dispose(); train?.targets.dispose()
     validation?.images.dispose(); validation?.targets.dispose()
-    model?.dispose()
+    if (!keepModel) model?.dispose()
   }
 }

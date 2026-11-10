@@ -17,6 +17,9 @@ import {
 import { loadLocalImageCsv, selectLocalImageGallery, type LocalImageDataset, type LocalImageSample } from '../../ml/cnn/localImageCsv'
 import { CnnDiagramView } from './CnnDiagram'
 import { CnnTrainingPanel, EMPTY_CNN_TRAINING, type CnnTrainingDisplay } from './CnnTrainingPanel'
+import { CnnEvaluationPanel } from './CnnEvaluationPanel'
+import { CnnPredictionPanel } from './CnnPredictionPanel'
+import type { CnnEvaluation } from '../../ml/cnn/cnnEvaluation.ts'
 import { startCnnTraining, type CnnSession } from '../../ml/cnn/cnnSession'
 import { DEFAULT_CNN_TRAIN_OPTIONS, type CnnTrainOptions, type CnnTrainingEvent } from '../../ml/cnn/trainingTypes'
 
@@ -169,20 +172,7 @@ function CnnArchitectureView({ config, setConfig, canConfigure, isTraining, inpu
   </div>
 }
 
-function UpcomingPanel({ tab }: { tab: ViewId }) {
-  const next = 'CNN-3'
-  const description = tab === 'evaluar'
-    ? 'Matriz de confusión, métricas por clase y ejemplos de errores sobre el conjunto de test.'
-    : 'Predicción con imágenes de prueba y archivos cargados por el usuario.'
-  return <Surface className="flex min-h-60 flex-col items-center justify-center p-8 text-center">
-    <Layers3 size={32} className="text-[var(--muted)]" />
-    <h2 className="mt-4 text-xl font-semibold">Disponible en {next}</h2>
-    <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted)]">{description}</p>
-    <p className="mt-3 text-xs text-[var(--muted)]">Esta vista todavía no ejecuta cálculos ni presenta resultados simulados.</p>
-  </Surface>
-}
-
-/** Pantalla CNN-2A: carga CSV local y entrena en memoria, sin escrituras en Supabase. */
+/** CNN-3: evalúa un subconjunto test e infiere imágenes con un modelo temporal. */
 export function CnnPage() {
   const { projectId = '' } = useParams()
   const { state } = useAuth()
@@ -200,6 +190,7 @@ export function CnnPage() {
   const session = useRef<CnnSession | null>(null)
   const [trainOptions, setTrainOptions] = useState<CnnTrainOptions>(DEFAULT_CNN_TRAIN_OPTIONS)
   const [training, setTraining] = useState<CnnTrainingDisplay>(EMPTY_CNN_TRAINING)
+  const [evaluation, setEvaluation] = useState<CnnEvaluation | null>(null)
 
   const loadProject = useCallback(async (signal?: { cancelled: boolean }) => {
     setChecking(true)
@@ -229,11 +220,25 @@ export function CnnPage() {
     session.current?.dispose()
   }, [])
 
+  // Una nueva identidad o proyecto no debe reutilizar datos/modelos de la sesión anterior.
+  useEffect(() => {
+    loadAbort.current?.abort()
+    session.current?.dispose()
+    session.current = null
+    setDataset(null)
+    setTraining(EMPTY_CNN_TRAINING)
+    setEvaluation(null)
+    setSampleError('')
+  }, [projectId, userId])
+
   /** Recibe únicamente métricas reales del motor de TensorFlow.js. */
   function handleTrainingEvent(event: CnnTrainingEvent) {
+    // El reporte pertenece a la sesión concreta: nunca se reutiliza tras cambiar datos.
+    if (event.type === 'evaluated') { setEvaluation(event.report); return }
+    if (event.type === 'prediction' || event.type === 'prediction-error') return
     setTraining((previous) => {
       switch (event.type) {
-        case 'status': return { ...previous, phase: 'running', message: event.message, backend: event.backend ?? previous.backend, trainingCount: event.trainingCount ?? previous.trainingCount, validationCount: event.validationCount ?? previous.validationCount }
+        case 'status': return { ...previous, phase: 'running', message: event.message, backend: event.backend ?? previous.backend, trainingCount: event.trainingCount ?? previous.trainingCount, validationCount: event.validationCount ?? previous.validationCount, testCount: event.testCount ?? previous.testCount }
         case 'batch': return { ...previous, progress: Math.max(previous.progress, (event.epoch - 1 + event.batch / event.batches) / event.epochs) }
         case 'epoch': return { ...previous, epochs: [...previous.epochs, event.metrics], progress: Math.max(previous.progress, event.metrics.epoch / trainOptions.epochs) }
         case 'completed': return { ...previous, phase: 'completed', message: 'Entrenamiento terminado.', durationMs: event.durationMs, backend: event.backend, progress: 1 }
@@ -247,6 +252,7 @@ export function CnnPage() {
     if (training.phase === 'running') return
     if (!dataset || membership?.role !== 'engineer' || project?.status !== 'active' || describeCnn(config, input).errors.length || trainOptions.samples > dataset.count) return
     session.current?.dispose()
+    setEvaluation(null)
     setTraining({ ...EMPTY_CNN_TRAINING, phase: 'running', message: 'Iniciando TensorFlow.js…' })
     // Copias independientes: los selectores no alteran una ejecución en marcha.
     session.current = startCnnTraining(structuredClone(config), { ...trainOptions }, handleTrainingEvent, dataset)
@@ -263,6 +269,10 @@ export function CnnPage() {
     try {
       const loaded = await loadLocalImageCsv(file, controller.signal)
       if (!controller.signal.aborted) {
+        // El modelo anterior no debe clasificar imágenes de otro CSV.
+        session.current?.dispose()
+        session.current = null
+        setEvaluation(null)
         setDataset(loaded)
         setTrainOptions((previous) => ({ ...previous, samples: Math.min(previous.samples, loaded.count) }))
         setTraining(EMPTY_CNN_TRAINING)
@@ -272,6 +282,16 @@ export function CnnPage() {
     } finally {
       if (!controller.signal.aborted) setLoadingSamples(false)
     }
+  }
+
+  /** Cambiar la red invalida pesos y evaluación antiguos; evita predicciones obsoletas. */
+  function changeConfig(next: CnnConfig) {
+    if (training.phase === 'running') return
+    session.current?.dispose()
+    session.current = null
+    setEvaluation(null)
+    setTraining(EMPTY_CNN_TRAINING)
+    setConfig(next)
   }
 
   if (checking) return <Surface className="p-8"><Spinner label="Comprobando proyecto y permisos…" centered /></Surface>
@@ -289,16 +309,17 @@ export function CnnPage() {
       <div>
         <p className="text-xs text-[var(--muted)]"><Link className="underline-offset-4 hover:underline" to={`/proyectos/${projectId}`}>{project.name}</Link> <ArrowRight className="mx-1 inline size-3" /> CNN</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Red convolucional (CNN)</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">Adjunta un CSV de imágenes, configura la arquitectura y entrena una CNN con métricas reales. Los datos y resultados permanecen en tu navegador.</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">Adjunta un CSV, entrena, evalúa con datos reservados y clasifica imágenes. El modelo permanece solo durante esta sesión del navegador.</p>
       </div>
       <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-xs font-semibold">{dataset ? `${dataset.width} × ${dataset.height} · ${dataset.name}` : 'Dataset local · CSV'}</span>
     </header>
     <Tabs label="Secciones del módulo CNN" idPrefix="cnn" items={TABS} value={tab} onChange={(next) => setTab(next as ViewId)} />
     <div id={`cnn-panel-${tab}`} role="tabpanel" aria-labelledby={`cnn-tab-${tab}`} tabIndex={0} className="min-w-0 focus-visible:outline-2 focus-visible:outline-[var(--focus)]">
       {tab === 'datos' && <CnnDataView dataset={dataset} loading={loadingSamples} error={sampleError} onFile={(file) => void loadFile(file)} disabled={isTraining} />}
-      {tab === 'arquitectura' && <CnnArchitectureView config={config} setConfig={setConfig} canConfigure={canConfigure} isTraining={isTraining} input={input} />}
+      {tab === 'arquitectura' && <CnnArchitectureView config={config} setConfig={changeConfig} canConfigure={canConfigure} isTraining={isTraining} input={input} />}
       {tab === 'entrenar' && <CnnTrainingPanel options={trainOptions} setOptions={setTrainOptions} display={training} canTrain={canTrain} architectureValid={describeCnn(config, input).errors.length === 0} datasetCount={dataset?.count ?? 0} datasetName={dataset?.name ?? null} onStart={startTraining} onCancel={() => session.current?.cancel()} />}
-      {(tab === 'evaluar' || tab === 'predecir') && <UpcomingPanel tab={tab} />}
+      {tab === 'evaluar' && <CnnEvaluationPanel report={training.phase === 'completed' ? evaluation : null} inputSize={input.width} onTrain={() => setTab('entrenar')} />}
+      {tab === 'predecir' && <CnnPredictionPanel report={training.phase === 'completed' ? evaluation : null} input={input} onPredict={(pixels) => session.current?.predict(pixels) ?? Promise.reject(new Error('No hay una CNN entrenada en esta sesión.'))} onTrain={() => setTab('entrenar')} />}
     </div>
   </div>
 }
