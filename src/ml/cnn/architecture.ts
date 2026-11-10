@@ -36,7 +36,8 @@ export interface CnnDiagram {
   errors: string[]
 }
 
-export const MNIST_INPUT = { width: 28, height: 28, channels: 1, classes: 10 } as const
+export interface CnnInputShape { width: number; height: number; channels: number; classes: number }
+export const MNIST_INPUT: CnnInputShape = { width: 28, height: 28, channels: 1, classes: 10 }
 
 export function defaultCnnConfig(): CnnConfig {
   return {
@@ -67,7 +68,7 @@ const isDenseUnits = (value: number) => [32, 64, 128].includes(value)
  * TensorFlow.js Conv2D: same => ceil(dim/stride), valid => dim-kernel+1 (stride=1).
  * MaxPooling2D 2x2 con stride=2 y padding=valid => floor(dim/2).
  */
-export function describeCnn(config: CnnConfig, input: { width: number; height: number; channels: number; classes: number } = MNIST_INPUT): CnnDiagram {
+export function describeCnn(config: CnnConfig, input: CnnInputShape = MNIST_INPUT): CnnDiagram {
   const errors: string[] = []
   const layers: CnnLayerDescription[] = []
   let parameters = 0
