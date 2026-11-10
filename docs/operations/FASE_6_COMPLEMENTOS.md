@@ -166,3 +166,81 @@ El PDF de Reportes ahora utiliza una plantilla independiente de la pantalla inte
 - Verificación: `node --experimental-strip-types --test tests/fase6.ux4-navigation.test.mjs`, `npm run typecheck`, `npm run build`, comprobación móvil/escritorio y despliegue Vercel.
 
 **Estado:** pendiente de aceptación visual en Vercel.
+
+<!-- FASE6-OPERACION-SEGURIDAD-20261109 -->
+## Incremento de cierre operativo — Seguridad, integridad y recuperación
+
+**Estado:** herramientas y procedimientos preparados; pendiente de comprobación en producción y ensayo de restauración. Los módulos de cuentas, revisión, reportes, auditoría y las mejoras de navegación fueron validados funcionalmente en Vercel por el equipo. Esta aceptación no equivale a haber completado una auditoría de seguridad ni un respaldo recuperable.
+
+### 1. Alcance y límites
+
+- `scripts/check-fase6-repository.mjs`: preflight local contra secretos aparentemente versionados y la configuración JWT. Es una inspección estática, no un escáner exhaustivo de credenciales.
+- `scripts/test-fase6-hardening-live.mjs`: pruebas **solo lectura** con Admin y Lector de `.env.test.local`; verifica identidad, roles, función administrativa, auditoría global, intento anónimo y, cuando existan muestras, aislamiento de proyectos y privacidad de Storage. Los casos sin muestra se marcan **OMITIDA**, nunca se declaran aprobados.
+- `supabase/tests/FASE_6_SEGURIDAD_READONLY.sql`: consultas de diagnóstico para revisar RLS, bucket privado, políticas, funciones privilegiadas, coincidencia de archivos y permisos SQL. No cambia el esquema ni los datos.
+- Los módulos siguen limitados a entrenamiento TF.js local, CSV local, PostgreSQL con RLS y almacenamiento privado de modelos; no se incorpora un backend remoto de entrenamiento ni credenciales privilegiadas al navegador.
+
+### 2. Secuencia de verificación (Git Bash)
+
+```bash
+node scripts/check-fase6-repository.mjs
+node --test tests/fase6.ops.test.mjs tests/fase6.ops-live-mock.test.mjs
+npm run typecheck
+npm run build
+node --env-file=.env.test.local scripts/test-fase6-hardening-live.mjs
+```
+
+La prueba en vivo requiere cuentas **activas y distintas** Admin/Lector y el despliegue previo de `admin-users`; no crea cuentas, no registra exportaciones y no hace escrituras. Ejecutar el SQL de diagnóstico desde Supabase SQL Editor. Revisar manualmente cualquier resultado **ERROR**, **OMITIDA** o `FALTA`. No desactivar RLS ni conceder permisos a `anon` por comodidad.
+
+### 3. Política inicial de retención (propuesta pendiente de aprobación)
+
+| Activo | Política propuesta | Condición |
+|---|---|---|
+| CSV original | Solo memoria del navegador; no se almacena en Supabase | Límite de importación vigente: 10 MiB o 50 000 filas |
+| Ejecuciones y métricas | Conservar mientras exista el proyecto | Sin borrado automático |
+| Versiones de modelo aprobadas y eventos de revisión | Conservar sin sobrescritura | Retiro es evento, no eliminación física |
+| Auditoría | Conservar inicialmente durante la vida del proyecto | Sin job de purga automático |
+| Cargas incompletas de Storage | Revisar periódicamente y proponer limpieza manual | No eliminar objetos sin reconciliar reservas y versiones |
+| Respaldos operativos externos | Mantener copias cifradas con acceso restringido | Frecuencia y tiempo de retención por definir según plan/capacidad |
+
+**No hay automatización de limpieza ni de backup en este incremento.** Las cifras de retención y el calendario deben aprobarse antes de aplicar borrados.
+
+### 4. Respaldo y restauración (procedimiento operativo)
+
+1. **Registrar inventario.** Anotar proyecto Supabase, commit de Git, migración más reciente aplicada, cantidad de versiones y objetos del bucket `model-artifacts`. No anotar claves ni tokens en la documentación.
+2. **Respaldar PostgreSQL.** Revisar `Database → Backups` en Supabase Dashboard. La disponibilidad y retención dependen del plan. En Free, crear exportaciones lógicas con la CLI oficial y guardarlas **cifradas fuera del repositorio**. Evitar pegar la URL con credenciales en el historial de la terminal. Los respaldos de PostgreSQL contienen metadatos de Storage, no los bytes de `model.json` y `weights.bin`.
+3. **Respaldar artefactos de Storage por separado.** Exportar de forma privada todos los objetos referenciados por versiones confirmadas desde `model-artifacts` mediante una cuenta operativa autorizada y herramientas oficiales (Dashboard/CLI/S3, según volumen). Guardar junto con un inventario de rutas y hashes SHA-256. No crear buckets públicos ni URLs firmadas sin justificación y vencimiento corto.
+4. **Prueba de restauración aislada.** Crear un proyecto de prueba separado. Restaurar DB y objetos compatibles; revisar triggers, RLS, permisos, Auth y la Edge Function. No restaurar encima de producción para ensayar. Verificar que un modelo recuperado coincide con los hashes y predice sin CSV, y que un Lector externo no puede descargarlo.
+5. **Validar y documentar.** Registrar fecha, responsable, resultado y RPO/RTO observados (si se midieron). No afirmar recuperación exitosa hasta realizarla. Para incidentes reales, congelar cambios, inventariar el alcance y restaurar según el mecanismo disponible, considerando pérdida de datos desde el punto de respaldo.
+
+Documentación oficial: https://supabase.com/docs/guides/platform/backups y https://supabase.com/docs/guides/storage/management/download-objects .
+
+### 5. Seguimiento operativo y criterios de salida
+
+- **Diario durante operación activa:** Vercel (último despliegue exitoso), Supabase Auth/Edge Function logs y errores de carga, cuotas de base de datos/Storage y fallos de entrenamiento.
+- **Semanal:** ejecutar el preflight del repositorio y revisar eventos de auditoría, modelos incompletos y alertas de Supabase. Validar límites de CSV y artefactos mediante pruebas existentes.
+- **Mensual o antes del cierre:** repetir controles RLS de dos cuentas con permisos distintos y una restauración aislada cuando la infraestructura lo permita.
+- **Para cerrar F6:** builds y pruebas pasan, lecturas indebidas denegadas en vivo, evidencia de salud/capacidad, política de retención aprobada, respaldo verificable con prueba de restauración, y checklist por rol documentado. Una prueba omitida **no** satisface su criterio de aceptación.
+
+**Limitaciones conocidas:** esta versión no incluye monitor continuo, alertas automáticas, job de limpieza, backup ejecutado ni prueba de restauración real. Esas tareas requieren configuración operativa y aprobación explícita del responsable de la infraestructura.
+
+
+## Fase 6 — Mejoras 5: identidad visual del usuario (2026-11-09)
+
+- Topbar: botón circular con avatar, sin nombre visible. El desplegable muestra «Sesión iniciada», nombre y correo, seguido de Cuenta, Tema y Cerrar sesión.
+- Mi cuenta: se elimina el bloque de estado redundante, se conserva la edición del nombre y el modal de contraseña y se incorpora un modal para subir/quitar la fotografía.
+- Sin fotografía se muestran las dos primeras letras del nombre, en mayúsculas, sobre un fondo pastel estable derivado del ID del usuario (sin aleatoriedad por render).
+- Migración `202611090011_private_user_avatars.sql`: columna `public.app_users.avatar_path`, permiso SELECT de esa columna (necesario debido a los GRANT por columna de F1), RPC `set_my_avatar` con verificación de cuenta activa y pertenencia, bucket privado `user-avatars` y políticas Storage limitadas al propietario. Ningún cambio en `model-artifacts`.
+- Se aceptan JPG, PNG y WebP, máximo 2 MiB; las fotos se descargan con JWT como blob local y se revoca su URL al desmontar la vista. SVG y archivos vacíos son rechazados.
+- La carga usa nombres nuevos con `upsert: false`; después actualiza el puntero mediante RPC. Al sustituir o quitar foto se intenta eliminar el objeto anterior. Si la eliminación falla, puede requerirse limpieza operativa de archivos huérfanos privados.
+- Validación pendiente: ejecutar `node --experimental-strip-types --test tests/fase6.avatars.test.mjs`, `npm run typecheck`, `npm run build`, migración 011 y pruebas funcionales con usuarios de diferentes roles en entorno real.
+- Prueba operativa F6: si `TEST_F2_READER_EMAIL` o `TEST_F2_READER_PASSWORD` quedaron anticuados después de reemplazar una cuenta de prueba, corregirlos localmente antes de repetir `scripts/test-fase6-hardening-live.mjs`.
+
+## Matriz de permisos por rol — Fase 6
+
+La columna **Permisos → Ver** en «Proyectos → Integrantes» muestra las capacidades documentadas de cada rol. Esta vista es **explicativa**, no autoriza operaciones: PostgreSQL/RLS, RPC y la Edge Function siguen siendo la fuente de verdad. Las opciones condicionadas explican requisitos como proyecto activo, membresía específica y prohibición de autoaprobar versiones.
+
+La clasificación distingue al **Administrador global** de los roles por proyecto. Admin puede gestionar usuarios y metadatos/membresías de proyectos, pero necesita una membresía técnica explícita para leer modelos privados, entrenar, aprobar o exportar reportes. El Responsable gestiona el proyecto y la auditoría del mismo, pero no recibe automáticamente permiso de entrenamiento ni aprobación; el Ingeniero entrena/publica; el Revisor decide sobre versiones ajenas; y el Lector consulta los recursos autorizados. **La configuración dinámica de límites de recursos descrita como aspiración en el Documento Maestro todavía no está implementada en la interfaz de administración.**
+
+Verificación: `node --env-file=.env.test.local scripts/test-fase6-role-matrix-live.mjs`, usando cinco cuentas distintas y un proyecto activo de prueba que incluya los cuatro roles de proyecto. El script valida identidades y membresías, consulta las políticas RLS y comprueba rutas de autorización por RPC con entradas que garantizan rechazo **antes de escribir**, además de la Edge Function administrativa. Cuando no existan registros de ejemplo, informa **OMITIDA**; no da por superado un permiso que no ha podido comprobar. El script no crea, elimina ni modifica proyectos, usuarios, entrenamientos, modelos o revisiones. Las acciones positivas que requieren escritura quedan para validación manual en un proyecto de prueba controlado.
+
+Para no mezclar un fallo de credenciales con un fallo de permisos, las identidades se verifican primero. No se guardan contraseñas ni tokens en los resultados, y las claves de administración no se cargan en el navegador. Este incremento no requiere migraciones SQL nuevas.

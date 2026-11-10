@@ -13,6 +13,7 @@ import { addMember, archiveProject, changeMemberRole, getProject, listMembers, r
 import { projectRoleLabels, projectRoles } from '../../types/projects'
 import type { Project, ProjectMember, ProjectRole } from '../../types/projects'
 import { ProjectForm } from './ProjectForm'
+import { MemberPermissionsModal } from './MemberPermissionsModal'
 
 const MEMBER_PAGE_SIZE = 10
 const memberRoleOptions = projectRoles.map((value) => ({ value, label: projectRoleLabels[value] }))
@@ -34,6 +35,7 @@ export function ProjectDetailPage() {
   const [role, setRole] = useState<ProjectRole>('reader')
   const [memberPage, setMemberPage] = useState(1)
   const [memberToRemove, setMemberToRemove] = useState<ProjectMember | null>(null)
+  const [memberForPermissions, setMemberForPermissions] = useState<ProjectMember | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -108,16 +110,17 @@ export function ProjectDetailPage() {
       <Surface className="p-5 sm:p-7">
         <header className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><Users size={19} /><h2 className="text-lg font-semibold">Integrantes</h2></div><p className="mt-2 text-xs text-[var(--muted)]">Permisos por proyecto, independientes del Administrador global.</p></div>{canManage && <Button onClick={() => { setEmail(''); setRole('reader'); setAdding(true) }}><Plus size={16}/> Agregar integrante</Button>}</header>
         <div className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[580px] border-collapse text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="px-3 py-4 font-medium">Usuario</th><th className="px-3 py-4 font-medium">Rol de proyecto</th><th className="px-3 py-4 text-right font-medium">Acciones</th></tr></thead>
+          <table className="w-full min-w-[680px] border-collapse text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="px-3 py-4 font-medium">Usuario</th><th className="px-3 py-4 font-medium">Rol de proyecto</th><th className="px-3 py-4 font-medium">Permisos</th><th className="px-3 py-4 text-right font-medium">Acciones</th></tr></thead>
             <tbody>{pageMembers.map((member) => {
               const immutable = member.user_id === currentUserId || member.user_id === project.owner_id
-              return (<tr key={member.user_id} className="border-b border-[var(--line)] last:border-0"><td className="px-3 py-4"><p className="font-medium">{member.display_name}</p><p className="break-all text-xs text-[var(--muted)]">{member.email}</p></td><td className="px-3 py-4">{canManage && !immutable ? <SelectField aria-label={`Rol de ${member.display_name}`} value={member.role} disabled={busy} className="w-[190px]" options={memberRoleOptions} onChange={(event) => { const nextRole = event.target.value as ProjectRole; void perform(() => changeMemberRole(projectId, member.user_id, nextRole), 'Rol actualizado.').catch(() => {}) }} /> : <span className="text-xs">{projectRoleLabels[member.role]} {member.user_id === project.owner_id && '· Propietario'}</span>}</td><td className="px-3 py-4 text-right">{canManage && !immutable && <Button type="button" variant="ghost" disabled={busy} aria-label={`Quitar a ${member.display_name}`} onClick={() => setMemberToRemove(member)}><Trash2 size={16}/></Button>}</td></tr>)
+              return (<tr key={member.user_id} className="border-b border-[var(--line)] last:border-0"><td className="px-3 py-4"><p className="font-medium">{member.display_name}</p><p className="break-all text-xs text-[var(--muted)]">{member.email}</p></td><td className="px-3 py-4">{canManage && !immutable ? <SelectField aria-label={`Rol de ${member.display_name}`} value={member.role} disabled={busy} className="w-[190px]" options={memberRoleOptions} onChange={(event) => { const nextRole = event.target.value as ProjectRole; void perform(() => changeMemberRole(projectId, member.user_id, nextRole), 'Rol actualizado.').catch(() => {}) }} /> : <span className="text-xs">{projectRoleLabels[member.role]} {member.user_id === project.owner_id && '· Propietario'}</span>}</td><td className="px-3 py-4"><Button type="button" variant="ghost" aria-label={`Ver permisos de ${member.display_name}`} onClick={() => setMemberForPermissions(member)}>Ver</Button></td><td className="px-3 py-4 text-right">{canManage && !immutable && <Button type="button" variant="ghost" disabled={busy} aria-label={`Quitar a ${member.display_name}`} onClick={() => setMemberToRemove(member)}><Trash2 size={16}/></Button>}</td></tr>)
             })}</tbody></table>
           {!members.length && <p className="py-6 text-sm text-[var(--muted)]">Sin integrantes registrados.</p>}
           <Pagination page={currentPage} pageSize={MEMBER_PAGE_SIZE} total={members.length} onPageChange={setMemberPage}/>
         </div>
       </Surface>
       {admin && <p className="text-xs leading-6 text-[var(--muted)]">La administración global permite gestionar metadatos e integrantes, pero no concede automáticamente permisos sobre arquitecturas, datasets, entrenamientos o modelos privados.</p>}
+      <MemberPermissionsModal member={memberForPermissions} projectStatus={project.status} onClose={() => setMemberForPermissions(null)} />
       <ProjectForm open={editing} project={project} onClose={() => setEditing(false)} onSave={async (values) => { await perform(() => updateProject(projectId, values.name, values.description), 'Proyecto actualizado y confirmado en Supabase.') }} />
       <Modal open={adding} title="Agregar integrante" onClose={() => { if (!busy) setAdding(false) }}>
         <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); void perform(() => addMember(projectId, email.trim(), role), 'Integrante incorporado al proyecto.').then(() => setAdding(false)).catch(() => {}) }}>
