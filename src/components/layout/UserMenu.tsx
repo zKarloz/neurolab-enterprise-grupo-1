@@ -1,12 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Check, ChevronDown, CircleUserRound, LogOut, Monitor, Moon, Sun, UserRound } from 'lucide-react'
+import { Check, LogOut, Monitor, Moon, Sun, UserRound } from 'lucide-react'
 import { useTheme } from '../../app/ThemeProvider'
 import type { ThemeMode } from '../../app/themePreferences'
+import { UserAvatar } from '../ui/UserAvatar'
 import './userMenuMotion.css'
 
 interface UserMenuProps {
+  userId: string
   displayName: string
+  email: string
+  avatarPath: string | null
   onSignOut: () => Promise<void>
 }
 
@@ -17,7 +21,7 @@ const themeOptions = [
 ] as const
 
 /** Menú único del encabezado: perfil, preferencias y salida. */
-export function UserMenu({ displayName, onSignOut }: UserMenuProps) {
+export function UserMenu({ userId, displayName, email, avatarPath, onSignOut }: UserMenuProps) {
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const { theme, setTheme } = useTheme()
@@ -72,13 +76,11 @@ export function UserMenu({ displayName, onSignOut }: UserMenuProps) {
         aria-expanded={open}
         disabled={signingOut}
         onClick={() => setOpen((previous) => !previous)}
-        className="flex h-11 min-w-0 max-w-[230px] items-center gap-2.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-left text-sm font-medium transition-colors hover:bg-[var(--surface-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] disabled:opacity-60 sm:min-w-40"
+        aria-label="Abrir opciones de cuenta"
+        title="Opciones de cuenta"
+        className="grid size-11 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface)] transition-colors hover:bg-[var(--surface-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
       >
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted)]">
-          <CircleUserRound size={19} strokeWidth={1.8} aria-hidden="true" />
-        </span>
-        <span className="min-w-0 flex-1 truncate">{displayName}</span>
-        <ChevronDown size={15} aria-hidden="true" className={`shrink-0 text-[var(--muted)] transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
+        <UserAvatar userId={userId} displayName={displayName} avatarPath={avatarPath} size="sm" />
       </button>
 
       {/* La apertura conserva su deslizamiento ligero; el cierre solo desvanece.
@@ -88,9 +90,10 @@ export function UserMenu({ displayName, onSignOut }: UserMenuProps) {
         aria-hidden={!open}
         className={`absolute right-0 top-[calc(100%+0.65rem)] z-50 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-xl ${open ? 'nl-user-menu-opening visible opacity-100' : 'nl-user-menu-closing invisible pointer-events-none opacity-0'}`}
       >
-        <div className="border-b border-[var(--line)] px-3 py-2">
-          <p className="truncate text-sm font-semibold" title={displayName}>{displayName}</p>
-          <p className="text-xs text-[var(--muted)]">Opciones de cuenta</p>
+        <div className="border-b border-[var(--line)] px-3 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Sesión iniciada</p>
+          <p className="mt-2 truncate text-sm font-semibold" title={displayName}>{displayName}</p>
+          <p className="mt-1 break-all text-xs text-[var(--muted)]">{email}</p>
         </div>
         <NavLink
           to="/cuenta"
@@ -100,7 +103,7 @@ export function UserMenu({ displayName, onSignOut }: UserMenuProps) {
           <UserRound size={17} aria-hidden="true" /> Cuenta
         </NavLink>
         <div className="my-2 border-t border-[var(--line)] px-3 pt-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">Tema</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">TEMA</p>
           <div role="group" aria-label="Elegir apariencia" className="grid grid-cols-3 gap-1 rounded-xl bg-[var(--surface-muted)] p-1">
             {themeOptions.map(({ value, label, icon: Icon }) => (
               <button
