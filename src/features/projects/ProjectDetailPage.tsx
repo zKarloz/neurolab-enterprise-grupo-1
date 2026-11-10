@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Archive, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Layers3, Archive, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
@@ -89,6 +89,12 @@ export function ProjectDetailPage() {
       </div>
       <div className="flex flex-wrap gap-3 text-xs"><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">{project.status === 'active' ? 'Proyecto activo' : 'Proyecto archivado'}</span><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Creado {new Date(project.created_at).toLocaleDateString('es-PE')}</span>{admin && !isResponsible && <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Supervisión administrativa</span>}</div>
       {isEngineer && project.status === 'active' && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Dataset local</h2><p className="mt-2 text-sm text-[var(--muted)]">Importa y prepara un CSV sin subir sus filas a Supabase.</p><Link to={`/proyectos/${projectId}/datos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileSpreadsheet size={16}/> Abrir preparador CSV</Link></Surface>}
+      {/* CNN-1 muestra la configuración sólo a los integrantes del proyecto. */}
+      {isMember && <Surface className="p-5 sm:p-7">
+        <div className="flex items-center gap-2"><Layers3 size={19} /><h2 className="text-lg font-semibold">Red convolucional · CNN</h2></div>
+        <p className="mt-2 text-sm text-[var(--muted)]">Explora muestras reales de MNIST y configura visualmente capas Conv2D, pooling y Dense. Entrenamiento en CNN-2.</p>
+        <Link to={`/proyectos/${projectId}/cnn`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><Layers3 size={16}/> Abrir CNN</Link>
+      </Surface>}
       {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Evaluación e historial</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">Consulta las métricas por época y las evaluaciones de prueba confirmadas en Supabase, sin recuperar el CSV.</p>
         <Link to={`/proyectos/${projectId}/historial`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><ChartNoAxesCombined size={16}/> Abrir historial</Link>

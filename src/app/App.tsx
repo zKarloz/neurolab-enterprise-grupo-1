@@ -6,6 +6,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { HomePage } from '../features/home/HomePage'
 import { ProjectsPage } from '../features/projects/ProjectsPage'
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
+import { CnnPage } from '../features/cnn/CnnPage'
 import { LocalDatasetPage } from '../features/datasets/LocalDatasetPage'
 import { TrainingHistoryPage } from '../features/evaluation/TrainingHistoryPage'
 import { ModelRegistryPage } from '../features/models/ModelRegistryPage'
@@ -50,6 +51,7 @@ export function App() {
           <Route path="/cuenta" element={<AccountPage />} />
           <Route path="/proyectos" element={<ProjectsPage />} />
           <Route path="/proyectos/:projectId" element={<ProjectDetailPage />} />
+          <Route path="/proyectos/:projectId/cnn" element={<CnnPage />} />
           <Route path="/proyectos/:projectId/datos" element={<LocalDatasetPage />} />
           <Route path="/proyectos/:projectId/historial" element={<TrainingHistoryPage />} />
           <Route path="/proyectos/:projectId/modelos" element={<ModelRegistryPage />} />
