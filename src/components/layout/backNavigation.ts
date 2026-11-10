@@ -4,7 +4,8 @@ export interface BackDestination {
   label: string
 }
 
-const projectChildModules = new Set(['datos', 'historial', 'modelos', 'reportes'])
+// Auditoría de proyecto comparte el destino de los demás módulos anidados.
+const projectChildModules = new Set(['datos', 'historial', 'modelos', 'reportes', 'auditoria'])
 
 /** Solo ofrece retroceso en las rutas anidadas que controla este layout. */
 export function getBackDestination(pathname: string): BackDestination | null {

@@ -11,8 +11,8 @@ interface BackButtonProps {
 
 /**
  * Retroceso contextual compartido.
- * En escritorio vive en el margen izquierdo y permanece fijo bajo el topbar;
- * en móvil se integra al topbar para no cubrir tablas ni campos de entrada.
+ * Solo en escritorio: vive en el margen izquierdo del contenido y permanece
+ * fijo bajo el topbar. Los móviles usan navegación nativa del dispositivo.
  */
 export function BackButton({ destination, className = '', style }: BackButtonProps) {
   return (

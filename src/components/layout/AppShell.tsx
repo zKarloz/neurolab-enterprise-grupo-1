@@ -89,7 +89,7 @@ export function AppShell() {
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-[var(--surface)]"><BrainCircuit size={23} strokeWidth={1.7} aria-hidden="true" /></span>
             {!compact && <span className="text-sm font-bold tracking-tight">NeuroLab <span className="block text-xs font-normal text-[var(--muted)]">Enterprise</span></span>}
           </div>
-          {mobile && <button type="button" className="rounded-lg p-1 text-[var(--muted)]" aria-label="Cerrar menú" onClick={() => setMobileOpen(false)}><X size={20} /></button>}
+          {/* El cierre móvil se mantiene únicamente al pie del sidebar. */}
         </div>
         <nav aria-label="Navegación principal" className={`flex-1 overflow-y-auto py-8 ${compact ? 'px-3' : 'px-4'}`}>
           {!compact && <p className="px-3 text-[10px] font-semibold uppercase tracking-[.2em] text-[var(--muted)]">Espacio de trabajo</p>}
@@ -166,7 +166,6 @@ export function AppShell() {
         <header className="sticky top-0 z-20 flex min-h-[88px] items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--page)]/95 px-5 backdrop-blur sm:px-8 lg:px-12">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <button ref={menuButton} type="button" onClick={() => setMobileOpen(true)} aria-label="Abrir menú" aria-expanded={mobileOpen} className="shrink-0 rounded-lg p-2 lg:hidden"><Menu size={21} /></button>
-            {backDestination && <BackButton destination={backDestination} className="shrink-0 lg:hidden" />}
             <div className="flex min-w-0 flex-col items-start gap-0.5 text-xs text-[var(--muted)] sm:flex-row sm:items-center sm:gap-2">
               <span className="max-w-full truncate text-[10px] sm:text-xs">{section}</span>
               <ChevronRight size={14} className="hidden shrink-0 sm:block" aria-hidden="true" />
@@ -177,8 +176,8 @@ export function AppShell() {
         </header>
         {signOutError && <div role="alert" className="border-b border-[var(--line)] bg-[var(--surface-muted)] px-8 py-3 text-sm">No se pudo cerrar la sesión. Inténtalo de nuevo.</div>}
         <main id="contenido" className="mx-auto w-full max-w-[1240px] p-5 pb-16 sm:p-8 lg:pl-24 lg:pr-12 lg:pt-12">
-          {/* Reservar una canaleta evita que la flecha solape títulos o acciones.
-              Las dos posiciones siguen al ancho del sidebar al contraer/expandir. */}
+          {/* Retroceso solo en escritorio: permanece fijo y con canaleta lateral propia.
+              En móvil se usa la navegación nativa del dispositivo. */}
           {backDestination && (
             <BackButton
               destination={backDestination}

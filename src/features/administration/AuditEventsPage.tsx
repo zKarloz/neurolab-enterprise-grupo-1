@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ClipboardList, Download, Filter, ShieldCheck } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { ClipboardList, Download, Filter, ShieldCheck } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
@@ -86,7 +86,7 @@ export function AuditEventsPage() {
   if (!authorized) return <Notice tone="error">{error || 'Auditoría restringida según rol y proyecto.'}</Notice>
 
   return <div className="space-y-6">
-    {scope && <Link to={`/proyectos/${scope}`} className="inline-flex items-center gap-2 text-sm text-[var(--muted)]"><ArrowLeft size={16}/> Volver al proyecto</Link>}
+    {/* El retroceso de auditoría por proyecto lo proporciona AppShell. */}
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 className="text-3xl font-semibold">Auditoría de acciones</h1>

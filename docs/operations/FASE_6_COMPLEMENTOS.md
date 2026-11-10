@@ -155,3 +155,14 @@ El PDF de Reportes ahora utiliza una plantilla independiente de la pantalla inte
 - Validación requerida antes de publicar: pruebas UX3, `npm run typecheck`, `npm run build`, `npm run preview` y comprobación en móviles/escritorio (incluido el cambio de ancho persistente, los roles globales y la impresión del PDF formal).
 
 **Estado:** implementación preparada, pendiente de aceptación en Vercel.
+
+<!-- F6-UI4-20261109 -->
+### Mejora de navegación 4 — simplificación móvil y auditoría
+
+- El topbar de pantallas menores que `lg` no muestra flecha de retroceso; la navegación se realiza con los controles nativos del sistema o la interfaz del navegador.
+- En el sidebar móvil se eliminó la `X` duplicada del encabezado. Se conserva el control inferior **Cerrar menú**, el cierre tocando el fondo y la tecla Escape.
+- La auditoría de proyecto (`/proyectos/:projectId/auditoria`) utiliza el mismo `BackButton` flotante, fijo y compartido del resto de módulos en escritorio. Vuelve al detalle del proyecto; no aparece en la auditoría administrativa global.
+- La migración, los roles, los eventos de auditoría y las exportaciones no cambian. Sin SQL ni nuevas dependencias.
+- Verificación: `node --experimental-strip-types --test tests/fase6.ux4-navigation.test.mjs`, `npm run typecheck`, `npm run build`, comprobación móvil/escritorio y despliegue Vercel.
+
+**Estado:** pendiente de aceptación visual en Vercel.
