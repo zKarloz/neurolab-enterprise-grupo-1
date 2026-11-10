@@ -42,3 +42,51 @@
 - [ ] El editor visual recalcula shapes y parámetros tras cambios, sin mostrar entrenamiento ficticio.
 - [ ] Esquema y pestañas son accesibles en escritorio/móvil y con ambos temas.
 - [ ] Vercel construye el commit incluyendo **todos** los archivos nuevos.
+
+## Incremento CNN-2 · Entrenamiento MNIST real en navegador
+
+**Estado:** implementación preparada para validación funcional, compilación y despliegue. No se considera completada hasta probar con un Ingeniero en un proyecto activo.
+
+### Funcionalidades
+
+- Pestaña **Entrenar** conectada a un modelo TensorFlow.js construido desde la configuración visual CNN-1. Los parámetros y dimensiones se contrastan con el diagrama antes de entrenar.
+- Subconjuntos limitados de MNIST original: 500, 1 000 o 2 000 imágenes del entrenamiento oficial, descargadas mediante IDX/gzip desde CVDF. La división local es **estratificada 80 % entrenamiento / 20 % validación**, reproducible con semilla 42 y sin intersección de índices. El conjunto oficial de prueba de 10 000 imágenes queda reservado para CNN-3.
+- Normalización de píxeles [0,1]; etiquetas multiclase one-hot; optimizador Adam, pérdida categorical crossentropy, exactitud y exactitud de validación reales.
+- Hiperparámetros seguros: 2/5/10 épocas, batch 16/32/64 y learning rate 0.001/0.0005. Predeterminados: 1 000 ejemplos, 2 épocas, batch 32 y learning rate 0.001.
+- Worker Vite dedicado (backend CPU y no bloqueante). Solo si el Worker falla *antes de iniciar*, se permite fallback al hilo principal, usando el backend disponible. Los callbacks ceden al event loop y admiten cancelación. Si el Worker se interrumpe durante la sesión, no se duplica el entrenamiento.
+- Progreso por lotes; curvas por época de loss/accuracy, entrenamiento/validación; backend usado y tiempo transcurrido. No se utilizan cifras ni resultados simulados.
+- La configuración se bloquea mientras dura una sesión; al salir del módulo se cancela y libera el Worker. El modelo y tensores de TensorFlow.js se liberan al terminar, cancelar o fallar. Las métricas permanecen en memoria de React hasta salir del módulo.
+- Solo el rol **Ingeniero** miembro de un proyecto **activo** puede iniciar el entrenamiento; la UI no escribe en Supabase. Mantiene las verificaciones de lectura y membresía de CNN-1.
+
+### Limitaciones declaradas
+
+- **No hay persistencia**, registro/historial ni predicción con el modelo entrenado en CNN-2. CNN-3 añadirá evaluación de test y predicción; CNN-4, guardado e historial unificado.
+- Worker CPU puede tardar más que un backend gráfico. El navegador necesita `DecompressionStream('gzip')`, acceso CORS al host MNIST y memoria suficiente para los tensores.
+- Cada ejecución vuelve a obtener la muestra; la vista previa de CNN-1 no se usa como entrenamiento. La muestra está limitada para proteger equipos modestos.
+- La descarga y entrenamiento no deben interpretarse como rendimiento sobre el test oficial. Los resultados de validación corresponden al 20 % de la muestra limitada.
+- No se necesitan migraciones SQL ni dependencias nuevas: `@tensorflow/tfjs`, `recharts` y Lucide ya forman parte del proyecto.
+
+### Criterios de aceptación CNN-2
+
+- [ ] `node --experimental-strip-types --test tests/cnn2.training-data.test.mjs` correcto.
+- [ ] `npm run typecheck && npm run build` sin errores.
+- [ ] Ingeniero: ejecutar 500 muestras, 2 épocas, verificar curvas reales y backend mostrado.
+- [ ] Cancelar durante descarga y entrenando; comprobar estado cancelado, sin error y sin bloqueos.
+- [ ] Cambiar de pestaña mientras entrena: la sesión continúa y el progreso se mantiene al regresar.
+- [ ] Roles Responsable/Revisor/Lector no pueden iniciar; Administrador sin membresía no entra.
+- [ ] Probar temas claro/oscuro, pantalla móvil y ausencia de métricas inventadas.
+- [ ] Confirmar el nuevo despliegue en Vercel después de incluir todos los archivos con `--git-check`.
+
+<!-- CNN2A_LOCAL_CSV_BEGIN -->
+### CNN-2A — Importación local de CSV e imágenes de tamaño variable
+
+**Motivo:** el enlace remoto a Google Storage bloqueaba la lectura de MNIST por CORS. Además, CNN-2 suponía que todo dataset era MNIST 28×28. Se elimina esa dependencia de las pantallas Datos/Entrenar.
+
+- **Entrada:** archivo CSV local con columna `label` al principio o final y `pixel_0`…`pixel_63` (8×8), o `pixel0`…`pixel783` (28×28). MNIST CSV también se acepta sin encabezados si cada fila comienza con su etiqueta. El CSV debe contener imágenes en gris, mínimo 100 filas, entre 2 y 10 clases; lectura limitada a 2 000 registros (máximo 200 MB de archivo) para proteger el navegador.
+- **Preprocesamiento:** se detecta 8×8 con escala 0–16 y se convierte a 0–255; en otros casos se utiliza escala 0–255. El entrenamiento normaliza a 0–1. Se valida el número de píxeles por fila, clases y rangos.
+- **Arquitectura:** entrada y clases inferidas del CSV. El diagrama y el motor TensorFlow.js comparten shapes y validación; no se permite entrenar capas incompatibles con la resolución.
+- **Entrenamiento:** muestras locales 100–2 000, validación estratificada reproducible, métricas reales y cancelación. Worker con alternativa en hilo principal. Los archivos no se envían a Supabase y el modelo permanece temporal hasta CNN-4.
+- **Fuera de alcance:** fotografías sueltas JPG/PNG, datasets RGB y carpetas/ZIP; se incorporarán en otra versión. El CSV completo no persiste ni se copia a Vercel.
+
+**Validación:** pruebas automatizadas del importador, carga del archivo `digits-8x8.csv` (1 797 filas) y muestra MNIST 28×28 sintética. La compilación integral y el entrenamiento real en el navegador quedan para la validación del desarrollador.
+<!-- CNN2A_LOCAL_CSV_END -->
