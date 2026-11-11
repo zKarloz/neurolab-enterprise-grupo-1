@@ -4,6 +4,8 @@ import { Download, FileText, Printer, Layers, Database, ChartNoAxesCombined, Box
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
+import { SelectField } from '../../components/ui/SelectField'
+import { familyForReportProblem, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
 import { Spinner } from '../../components/ui/Spinner'
 import { Surface } from '../../components/ui/Surface'
 import { useAuth } from '../auth/AuthProvider'
@@ -33,6 +35,7 @@ export function ProjectReportPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
+  const [family, setFamily] = useState<FamilyFilter>('all')
 
   useEffect(() => {
     let live = true
@@ -47,7 +50,8 @@ export function ProjectReportPage() {
     return () => { live = false }
   }, [projectId, userId])
 
-  const pageRuns = useMemo(() => data?.runs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) ?? [], [data, page])
+  const filteredRuns = useMemo(() => reportRunsByFamily(data?.runs ?? [], family), [data, family])
+  const pageRuns = useMemo(() => filteredRuns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredRuns, page])
   const evaluationByRun = useMemo(() => new Map<string, Record<string, unknown>>(data?.evaluations.map((item): [string, Record<string, unknown>] => [item.run_id, item.metrics_json]) ?? []), [data])
   const architecturesById = useMemo(() => new Map<string, string>(data?.architectures.map((row): [string, string] => [row.id, row.name]) ?? []), [data])
   const datasetsById = useMemo(() => new Map<string, string>(data?.datasets.map((row): [string, string] => [row.id, row.name]) ?? []), [data])
@@ -63,18 +67,20 @@ export function ProjectReportPage() {
       if (format === 'pdf') {
         window.print() // Solo la plantilla formal se muestra al imprimir; no se imprime el módulo.
       } else {
-        const rows = data.runs.map((run) => {
+        const rows = filteredRuns.map((run) => {
           const evaluation = evaluationByRun.get(run.id) ?? {}
-          return [run.id, run.created_at, run.problem_type, run.status, run.completed_epochs,
+          return [run.id, run.created_at, familyForReportProblem(run.problem_type) ?? 'desconocida', run.problem_type, run.status, run.completed_epochs,
             run.epochs_planned, run.backend ?? '', architecturesById.get(run.architecture_id) ?? '',
             datasetsById.get(run.dataset_id) ?? '', evaluation.loss ?? '', evaluation.accuracy ?? '',
             evaluation.precision ?? '', evaluation.recall ?? '', evaluation.f1 ?? '', evaluation.mse ?? '',
-            evaluation.rmse ?? '', evaluation.mae ?? '', evaluation.r2 ?? '']
+            evaluation.rmse ?? '', evaluation.mae ?? '', evaluation.r2 ?? '',
+            evaluation.macroPrecision ?? '', evaluation.macroRecall ?? '', evaluation.macroF1 ?? '']
         })
-        saveCsv(`neurolab-reporte-${projectId.slice(0, 8)}.csv`, toCsv(
-          ['run_id','fecha','problema','estado','epocas_confirmadas','epocas_planificadas','backend',
+        saveCsv(`neurolab-reporte-${projectId.slice(0, 8)}-${family}.csv`, toCsv(
+          ['run_id','fecha','familia','problema','estado','epocas_confirmadas','epocas_planificadas','backend',
             'arquitectura','dataset','loss_test','accuracy_test','precision_test','recall_test',
-            'f1_test','mse_test','rmse_test','mae_test','r2_test'], rows,
+            'f1_test','mse_test','rmse_test','mae_test','r2_test',
+            'precision_macro','recall_macro','f1_macro'], rows,
         ))
       }
     } catch (cause) {
@@ -136,16 +142,17 @@ export function ProjectReportPage() {
     </div>
     <Surface className="space-y-4 p-5 sm:p-7">
       <h2 className="text-lg font-semibold">Historial de entrenamiento</h2>
-      <p className="text-xs text-[var(--muted)]">Máximo 200 ejecuciones recientes en la instantánea. El archivo CSV exporta las filas consultadas, no todo el historial cuando supera ese límite.</p>
-      {data.runs.length === 0 ? <Notice>Este proyecto aún no registra entrenamientos.</Notice> : <div className="report-table overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="p-3">Fecha</th><th className="p-3">Arquitectura</th><th className="p-3">Estado</th><th className="p-3">Épocas</th><th className="p-3">Resultado test</th></tr></thead>
+      <div className="report-no-print max-w-xs"><SelectField id="report-family" label="Filtrar familias en detalle y exportaciones" value={family} options={[{value:'all',label:'Todas las familias'},{value:'feedforward',label:'Feedforward'},{value:'cnn',label:'CNN'}]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1) }}/></div>
+      <p className="text-xs text-[var(--muted)]">Hasta 200 ejecuciones recientes por proyecto. El filtro afecta al detalle y a las exportaciones CSV/PDF; los totales globales no cambian. Si existen más de 200 ejecuciones, este filtro solo cubre la muestra consultada.</p>
+      {filteredRuns.length === 0 ? <Notice>No hay ejecuciones para la familia seleccionada en la muestra reciente.</Notice> : <div className="report-table overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="p-3">Fecha</th><th className="p-3">Familia</th><th className="p-3">Arquitectura</th><th className="p-3">Estado</th><th className="p-3">Épocas</th><th className="p-3">Resultado test</th></tr></thead>
         <tbody>{pageRuns.map((run) => {
           const evaluation = evaluationByRun.get(run.id)
-          return <tr key={run.id} className="border-b border-[var(--line)] last:border-0"><td className="p-3 whitespace-nowrap">{new Date(run.created_at).toLocaleString('es-PE')}</td><td className="p-3">{architecturesById.get(run.architecture_id) ?? 'Arquitectura anterior'}</td><td className="p-3">{statusNames[run.status] ?? run.status}</td><td className="p-3 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td><td className="p-3 tabular-nums">{evaluation ? (run.problem_type === 'binary' ? `Exactitud ${metric(evaluation.accuracy)}` : `RMSE ${metric(evaluation.rmse)}`) : 'Sin evaluación'}</td></tr>
+          return <tr key={run.id} className="border-b border-[var(--line)] last:border-0"><td className="p-3 whitespace-nowrap">{new Date(run.created_at).toLocaleString('es-PE')}</td><td className="p-3">{familyForReportProblem(run.problem_type) ? familyLabel(familyForReportProblem(run.problem_type)!) : 'Otra'}</td><td className="p-3">{architecturesById.get(run.architecture_id) ?? 'Arquitectura anterior'}</td><td className="p-3">{statusNames[run.status] ?? run.status}</td><td className="p-3 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td><td className="p-3 tabular-nums">{evaluation ? (run.problem_type === 'multiclass' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'binary' ? `Exactitud ${metric(evaluation.accuracy)}` : `RMSE ${metric(evaluation.rmse)}`) : 'Sin evaluación'}</td></tr>
         })}</tbody></table></div>}
-      <div className="report-no-print"><Pagination page={page} pageSize={PAGE_SIZE} total={data.runs.length} onPageChange={setPage}/></div>
+      <div className="report-no-print"><Pagination page={page} pageSize={PAGE_SIZE} total={filteredRuns.length} onPageChange={setPage}/></div>
     </Surface>
     <p className="text-xs text-[var(--muted)]">Informe emitido desde NeuroLab Enterprise · {new Date().toLocaleString('es-PE')}. Las exportaciones autorizadas generan eventos de auditoría de solicitud.</p>
     </div>
-    <FormalReportDocument data={data} preparedBy={state.status === 'ready' ? state.profile.display_name : 'Usuario autorizado'} />
+    <FormalReportDocument data={data} familyFilter={family} preparedBy={state.status === 'ready' ? state.profile.display_name : 'Usuario autorizado'} />
   </div>
 }

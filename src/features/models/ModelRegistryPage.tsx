@@ -4,6 +4,8 @@ import { Database, Download, ShieldCheck } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
+import { SelectField } from '../../components/ui/SelectField'
+import type { FamilyFilter } from '../../ml/evaluation/families.ts'
 import { Surface } from '../../components/ui/Surface'
 import { useAuth } from '../auth/AuthProvider'
 import { SessionPredictionCard } from '../evaluation/SessionPredictionCard'
@@ -12,27 +14,32 @@ import { getProject } from '../../services/projects'
 import { downloadModelVersion, listRegisteredModels } from '../../services/modelRegistry'
 import type { RegisteredModel, RegisteredVersion } from '../../services/modelRegistry'
 import { loadDensePredictor } from '../../ml/models/artifacts'
+import { isCnnManifest, loadCnnPredictor } from '../../ml/cnn/modelPersistence.ts'
+import { CnnRestoredPredictionCard } from './CnnRestoredPredictionCard'
 import { ModelReviewsSection } from './ModelReviewsSection'
 
 const PAGE_SIZE = 8
 
-type LoadedPredictor = Awaited<ReturnType<typeof loadDensePredictor>>
+type LoadedPredictor = Awaited<ReturnType<typeof loadDensePredictor>> | Awaited<ReturnType<typeof loadCnnPredictor>>
 
 /** Registro F5: solo miembros de proyecto, lectura de archivos privados JWT y sin CSV. */
 export function ModelRegistryPage() {
   const { projectId = '' } = useParams()
   const { state } = useAuth()
   const userId = state.status === 'ready' ? state.user.id : ''
-  const [permission, setPermission] = useState<'checking'|'allowed'|'denied'>('checking')
+  const [permission, setPermission] = useState<'checking' | 'allowed' | 'denied'>('checking')
   const [projectName, setProjectName] = useState('')
   const [models, setModels] = useState<RegisteredModel[]>([])
   const [versions, setVersions] = useState<RegisteredVersion[]>([])
   const [page, setPage] = useState(1)
+  const [family, setFamily] = useState<FamilyFilter>('all')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<RegisteredVersion | null>(null)
   const predictor = useRef<LoadedPredictor | null>(null)
-  const pageVersions = useMemo(() => versions.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE), [versions,page])
+  const filteredVersions = useMemo(() => versions.filter((item) => family === 'all' ||
+    (isCnnManifest(item.preprocessing_manifest) ? 'cnn' : 'feedforward') === family), [versions, family])
+  const pageVersions = useMemo(() => filteredVersions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredVersions, page])
 
   useEffect(() => {
     let current = true
@@ -41,7 +48,7 @@ export function ModelRegistryPage() {
       if (!supabase || !projectId || !userId) throw new Error('Sin sesión.')
       const [project, member] = await Promise.all([
         getProject(projectId),
-        supabase.from('project_members').select('role').eq('project_id',projectId).eq('user_id',userId).maybeSingle(),
+        supabase.from('project_members').select('role').eq('project_id', projectId).eq('user_id', userId).maybeSingle(),
       ])
       if (member.error || !project || !member.data) throw new Error('Sin acceso técnico al proyecto.')
       const registry = await listRegisteredModels(projectId)
@@ -53,7 +60,7 @@ export function ModelRegistryPage() {
       }
     })().catch(() => { if (current) setPermission('denied') })
     return () => { current = false }
-  }, [projectId,userId])
+  }, [projectId, userId])
 
   useEffect(() => () => { predictor.current?.dispose(); predictor.current = null }, [])
 
@@ -65,7 +72,9 @@ export function ModelRegistryPage() {
     predictor.current = null
     try {
       const bundle = await downloadModelVersion(version)
-      const restored = await loadDensePredictor(bundle)
+      const restored = isCnnManifest(version.preprocessing_manifest)
+        ? await loadCnnPredictor(bundle, version.preprocessing_manifest)
+        : await loadDensePredictor(bundle)
       // No conservar pesos si la pantalla deja de estar montada.
       predictor.current = restored
       setSelected(version)
@@ -82,33 +91,44 @@ export function ModelRegistryPage() {
       <p className="text-sm text-[var(--muted)]">{projectName} · Versiones inmutables, descargadas desde Storage privado bajo RLS.</p>
     </header>
     <Surface className="space-y-4 p-5 sm:p-7">
-      <div className="flex items-center gap-2"><Database size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Versiones publicadas</h2></div>
+      <div className="flex items-center gap-2"><Database size={19} aria-hidden="true" /><h2 className="text-lg font-semibold">Versiones publicadas</h2></div>
       <p className="text-sm text-[var(--muted)]">Los Ingenieros publican versiones desde el entrenamiento finalizado. Los miembros autorizados pueden recuperarlas para predecir sin el CSV.</p>
-      {versions.length === 0 ? <Notice>Todavía no existen modelos publicados en este proyecto.</Notice> : <div className="overflow-x-auto">
+      <div className="max-w-xs"><SelectField id="registry-family" label="Familia de modelo" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1); setSelected(null); predictor.current?.dispose(); predictor.current = null }} /></div>
+      {filteredVersions.length === 0 ? <Notice>No hay versiones publicadas para este filtro.</Notice> : <div className="overflow-x-auto">
         <table className="w-full min-w-[630px] text-left text-sm">
-          <thead><tr className="border-b border-[var(--line)] text-[var(--muted)]"><th className="p-3">Modelo</th><th className="p-3">Versión</th><th className="p-3">Backend</th><th className="p-3">Fecha</th><th className="p-3">Acción</th></tr></thead>
+          <thead><tr className="border-b border-[var(--line)] text-[var(--muted)]"><th className="p-3">Modelo</th><th className="p-3">Familia</th><th className="p-3">Versión</th><th className="p-3">Backend</th><th className="p-3">Fecha</th><th className="p-3">Acción</th></tr></thead>
           <tbody>{pageVersions.map((version) => <tr key={version.id} className="border-b border-[var(--line)] last:border-0">
             <td className="p-3 font-medium">{models.find((model) => model.id === version.model_id)?.name ?? 'Modelo'}</td>
+            <td className="p-3">{isCnnManifest(version.preprocessing_manifest) ? 'CNN' : 'Feedforward'}</td>
             <td className="p-3 tabular-nums">v{version.version}</td>
             <td className="p-3">{version.backend.toUpperCase()}</td>
             <td className="p-3">{new Date(version.created_at).toLocaleString('es-PE')}</td>
             <td className="p-3"><Button type="button" variant="outline" disabled={busy} aria-pressed={selected?.id === version.id} onClick={() => void loadVersion(version)}>
-              <Download size={16}/> Cargar y predecir</Button></td>
+              <Download size={16} /> Cargar y predecir</Button></td>
           </tr>)}</tbody>
         </table>
       </div>}
-      <Pagination page={page} pageSize={PAGE_SIZE} total={versions.length} onPageChange={setPage}/>
+      <Pagination page={page} pageSize={PAGE_SIZE} total={filteredVersions.length} onPageChange={setPage} />
       {busy && <p role="status">Descargando y verificando el modelo…</p>}
       {error && <Notice tone="error">{error}</Notice>}
     </Surface>
     <ModelReviewsSection projectId={projectId} models={models} versions={versions} />
     {selected && <div className="space-y-4">
-      <Notice tone="success"><ShieldCheck size={16} className="inline"/> Versión v{selected.version} cargada con integridad SHA-256 verificada. Los datos de entrada de predicción siguen siendo locales.</Notice>
-      <SessionPredictionCard key={selected.id} manifest={selected.preprocessing_manifest}
-        predict={async (values) => {
-          if (!predictor.current) throw new Error('El modelo ya no está disponible.')
-          return predictor.current.predict(values)
-        }}/>
+      <Notice tone="success"><ShieldCheck size={16} className="inline" /> Versión v{selected.version} cargada con integridad SHA-256 verificada. Los datos de entrada de predicción siguen siendo locales.</Notice>
+      {isCnnManifest(selected.preprocessing_manifest) ? <CnnRestoredPredictionCard key={selected.id}
+        input={(predictor.current as Awaited<ReturnType<typeof loadCnnPredictor>>).input}
+        classNames={(predictor.current as Awaited<ReturnType<typeof loadCnnPredictor>>).classNames}
+        predict={(pixels) => {
+          const loaded = predictor.current
+          if (!loaded || !('input' in loaded)) return Promise.reject(new Error('La CNN ya no está disponible.'))
+          return loaded.predict(pixels)
+        }} />
+        : <SessionPredictionCard key={selected.id} manifest={selected.preprocessing_manifest}
+          predict={async (values) => {
+            const loaded = predictor.current
+            if (!loaded || 'input' in loaded) throw new Error('El modelo Feedforward ya no está disponible.')
+            return loaded.predict(values)
+          }} />}
     </div>}
   </div>
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ClipboardList, GitCompareArrows } from 'lucide-react'
+import { SelectField } from '../../components/ui/SelectField'
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
@@ -12,9 +13,9 @@ import { RunComparison } from './RunComparison.tsx'
 import { getProject } from '../../services/projects'
 import { supabase } from '../../lib/supabase'
 import { HISTORY_PAGE_SIZE, listHistoryPage, loadHistoryDetail } from '../../services/evaluationPersistence.ts'
-import type { HistoryRun, HistoryPage } from '../../services/evaluationPersistence.ts'
-import type { TestEvaluation } from '../../ml/evaluation/metrics.ts'
-import type { EpochMetrics } from '../../ml/training/types.ts'
+import type { HistoryRun, HistoryPage, HistoryDetail } from '../../services/evaluationPersistence.ts'
+import { CnnStoredEvaluationCard } from './CnnStoredEvaluationCard.tsx'
+import { compatibleForComparison, familyForProblem, familyLabel, problemLabel, type FamilyFilter } from '../../ml/evaluation/families.ts'
 
 const LABELS: Record<string, string> = {
   created: 'Creada', preparing: 'Preparando', running: 'Último estado: ejecutándose (puede estar interrumpida)',
@@ -31,18 +32,16 @@ export function TrainingHistoryPage() {
   const [permission, setPermission] = useState<Permission>('checking')
   const [projectName, setProjectName] = useState('')
   const [page, setPage] = useState(1)
+  const [family, setFamily] = useState<FamilyFilter>('all')
   const [result, setResult] = useState<HistoryPage>({ items: [], total: 0 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<HistoryRun | null>(null)
-  const [detail, setDetail] = useState<{ epochs: EpochMetrics[]; evaluation: TestEvaluation | null } | null>(null)
+  const [detail, setDetail] = useState<HistoryDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [comparison, setComparison] = useState<HistoryRun[]>([])
-  const [comparedDetails, setComparedDetails] = useState<[
-    { epochs: EpochMetrics[]; evaluation: TestEvaluation | null },
-    { epochs: EpochMetrics[]; evaluation: TestEvaluation | null },
-  ] | null>(null)
+  const [comparedDetails, setComparedDetails] = useState<[HistoryDetail, HistoryDetail] | null>(null)
   const [comparisonBusy, setComparisonBusy] = useState(false)
   const [comparisonError, setComparisonError] = useState('')
 
@@ -67,13 +66,13 @@ export function TrainingHistoryPage() {
     let current = true
     setLoading(true)
     setError('')
-    void listHistoryPage(projectId, page).then((response) => {
+    void listHistoryPage(projectId, page, family).then((response) => {
       if (current) setResult(response)
     }).catch((cause: unknown) => {
       if (current) setError(cause instanceof Error ? cause.message : 'No se pudo consultar el historial.')
     }).finally(() => { if (current) setLoading(false) })
     return () => { current = false }
-  }, [permission, projectId, page])
+  }, [permission, projectId, page, family])
 
   useEffect(() => {
     if (!selected) { setDetail(null); return }
@@ -97,10 +96,7 @@ export function TrainingHistoryPage() {
     setComparisonError('')
     setComparedDetails(null)
     void Promise.all(comparison.map((run) => loadHistoryDetail(run.id, run.problem_type)))
-      .then((details) => { if (current) setComparedDetails(details as [
-        { epochs: EpochMetrics[]; evaluation: TestEvaluation | null },
-        { epochs: EpochMetrics[]; evaluation: TestEvaluation | null },
-      ]) })
+      .then((details) => { if (current) setComparedDetails(details as [HistoryDetail, HistoryDetail]) })
       .catch((cause: unknown) => { if (current) setComparisonError(cause instanceof Error ? cause.message : 'No se pudo comparar las ejecuciones.') })
       .finally(() => { if (current) setComparisonBusy(false) })
     return () => { current = false }
@@ -110,7 +106,7 @@ export function TrainingHistoryPage() {
     setComparison((previous) => {
       if (previous.some((item) => item.id === run.id)) return previous.filter((item) => item.id !== run.id)
       if (previous.length === 2) return previous
-      if (previous.length === 1 && previous[0].problem_type !== run.problem_type) return previous
+      if (previous.length === 1 && !compatibleForComparison(previous[0].problem_type, run.problem_type)) return previous
       return [...previous, run]
     })
   }
@@ -125,7 +121,8 @@ export function TrainingHistoryPage() {
     </header>
     <Surface className="space-y-4 p-5 sm:p-7">
       <div className="flex items-center gap-2"><ClipboardList size={20}/><h2 className="text-lg font-semibold">Ejecuciones registradas</h2></div>
-      <p className="text-sm text-[var(--muted)]">Selecciona dos ejecuciones completas del mismo tipo para compararlas. Puedes elegirlas en distintas páginas.</p>
+      <p className="text-sm text-[var(--muted)]">Filtra por familia y selecciona dos ejecuciones completadas del mismo tipo de problema. Puedes elegirlas en distintas páginas del mismo filtro.</p>
+      <div className="max-w-xs"><SelectField id="history-family" label="Familia de red" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1); setSelected(null); setComparison([]) }}/></div>
       {comparison.length > 0 && <div className="flex flex-wrap items-center gap-2 text-sm" aria-live="polite">
         <span>{comparison.length}/2 seleccionadas</span>
         {comparison.map((run, index) => <span key={run.id} className="rounded-lg border border-[var(--line)] p-2">{index === 0 ? 'A' : 'B'} · {run.id.slice(0, 8)}</span>)}
@@ -135,20 +132,20 @@ export function TrainingHistoryPage() {
       {error && <Notice tone="error">{error}</Notice>}
       {!loading && !error && result.items.length === 0 && <p className="text-sm text-[var(--muted)]">No hay ejecuciones en esta página.</p>}
       {!loading && !error && result.items.length > 0 && <div className="overflow-x-auto">
-        <table className="w-full min-w-[650px] text-left text-sm">
+        <table className="w-full min-w-[760px] text-left text-sm">
           <thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]">
-            <th className="p-2">Fecha</th><th className="p-2">Problema</th><th className="p-2">Estado persistido</th><th className="p-2">Épocas</th><th className="p-2">Backend</th><th className="p-2">Detalle</th><th className="p-2">Comparar</th>
+            <th className="p-2">Fecha</th><th className="p-2">Familia</th><th className="p-2">Problema</th><th className="p-2">Estado persistido</th><th className="p-2">Épocas</th><th className="p-2">Backend</th><th className="p-2">Detalle</th><th className="p-2">Comparar</th>
           </tr></thead>
           <tbody>{result.items.map((run) => <tr key={run.id} className="border-b border-[var(--line)] last:border-0">
             <td className="p-2">{new Date(run.created_at).toLocaleString('es-PE')}</td>
-            <td className="p-2">{run.problem_type === 'binary' ? 'Binaria' : 'Regresión'}</td>
+            <td className="p-2">{familyLabel(familyForProblem(run.problem_type))}</td><td className="p-2">{problemLabel(run.problem_type)}</td>
             <td className="p-2">{LABELS[run.status] ?? run.status}</td>
             <td className="p-2 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td>
             <td className="p-2">{run.backend?.toUpperCase() ?? '—'}</td>
             <td className="p-2"><Button variant="outline" type="button" onClick={() => setSelected(run)} aria-pressed={selected?.id === run.id}>Ver métricas</Button></td>
             <td className="p-2"><Button variant="outline" type="button" aria-pressed={comparison.some((item) => item.id === run.id)}
               disabled={run.status !== 'completed' || (!comparison.some((item) => item.id === run.id) &&
-                (comparison.length >= 2 || (comparison.length === 1 && comparison[0].problem_type !== run.problem_type)))}
+                (comparison.length >= 2 || (comparison.length === 1 && !compatibleForComparison(comparison[0].problem_type, run.problem_type))))}
               onClick={() => toggleCompare(run)}><GitCompareArrows size={15} aria-hidden="true"/>{comparison.some((item) => item.id === run.id) ? 'Quitar' : 'Comparar'}</Button></td>
           </tr>)}</tbody>
         </table>
@@ -165,7 +162,9 @@ export function TrainingHistoryPage() {
       {detailError && <Notice tone="error">{detailError}</Notice>}
       {detail && <>
         {detail.epochs.length ? <TrainingMetricsChart epochs={detail.epochs} problemType={selected.problem_type}/> : <Notice>No hay épocas completas confirmadas para representar.</Notice>}
-        {detail.evaluation ? <TestEvaluationCard evaluation={detail.evaluation} confirmed/> :
+        {detail.evaluation ? detail.evaluation.problemType === 'multiclass'
+          ? <CnnStoredEvaluationCard evaluation={detail.evaluation}/>
+          : <TestEvaluationCard evaluation={detail.evaluation} confirmed/> :
           <Notice>No existe evaluación final guardada para esta ejecución. Es normal en entrenamientos de la Fase 3, cancelados o fallidos.</Notice>}
       </>}
     </section>}

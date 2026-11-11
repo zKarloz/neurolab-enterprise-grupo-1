@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowRight, Database, Image as ImageIcon, Layers3, RefreshCcw, ShieldCheck, SlidersHorizontal, UploadCloud } from 'lucide-react'
+import { ArrowRight, Database, Image as ImageIcon, Layers3, RefreshCcw, Save, ShieldCheck, SlidersHorizontal, UploadCloud } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
+import { InputField } from '../../components/ui/InputField'
 import { SelectField } from '../../components/ui/SelectField'
 import { Spinner } from '../../components/ui/Spinner'
 import { Surface } from '../../components/ui/Surface'
@@ -21,6 +22,10 @@ import { CnnEvaluationPanel } from './CnnEvaluationPanel'
 import { CnnPredictionPanel } from './CnnPredictionPanel'
 import type { CnnEvaluation } from '../../ml/cnn/cnnEvaluation.ts'
 import { startCnnTraining, type CnnSession } from '../../ml/cnn/cnnSession'
+import { sha256LocalFile } from '../../ml/cnn/sha256Stream.ts'
+import { createCnnPersistenceQueue, type CnnPersistenceQueue } from '../../ml/cnn/persistenceQueue.ts'
+import { createCnnRun, recordCnnRuntime, recordCnnEpoch, recordCnnEvaluation, finishCnnRun } from '../../services/cnnPersistence.ts'
+import { saveModelVersion, type RegisteredVersion } from '../../services/modelRegistry.ts'
 import { DEFAULT_CNN_TRAIN_OPTIONS, type CnnTrainOptions, type CnnTrainingEvent } from '../../ml/cnn/trainingTypes'
 
 const TABS = [
@@ -133,7 +138,7 @@ function CnnArchitectureView({ config, setConfig, canConfigure, isTraining, inpu
     <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
       <Surface className="p-5 sm:p-6">
         <div className="flex items-center gap-2"><SlidersHorizontal size={18} /><h2 className="text-lg font-semibold">Constructor CNN</h2></div>
-        <p className="mt-2 text-xs text-[var(--muted)]">El esquema se actualiza al modificar los bloques. La configuración es local y no se guarda todavía en Supabase.</p>
+        <p className="mt-2 text-xs text-[var(--muted)]">El esquema se actualiza al modificar los bloques. La configuración se registra al iniciar un entrenamiento; los pesos se publican por separado al finalizar.</p>
         <div className="mt-5 max-w-xs">
           <SelectField id="cnn-block-count" label="Bloques convolucionales" options={numberOptions([1, 2, 3])} value={String(config.blocks.length)} disabled={!canConfigure} onChange={(event) => setConfig(resizeCnnBlocks(config, Number(event.target.value)))} />
         </div>
@@ -187,10 +192,23 @@ export function CnnPage() {
   const [loadingSamples, setLoadingSamples] = useState(false)
   const [sampleError, setSampleError] = useState('')
   const loadAbort = useRef<AbortController | null>(null)
+  const startAbort = useRef<AbortController | null>(null)
+  const sourceFile = useRef<File | null>(null)
   const session = useRef<CnnSession | null>(null)
+  const persistence = useRef<CnnPersistenceQueue | null>(null)
+  const [runId, setRunId] = useState('')
+  const [savedEpochs, setSavedEpochs] = useState(0)
+  const [evaluationSaved, setEvaluationSaved] = useState(false)
+  const [syncState, setSyncState] = useState<'idle' | 'pending' | 'confirmed' | 'error'>('idle')
+  const [syncError, setSyncError] = useState('')
   const [trainOptions, setTrainOptions] = useState<CnnTrainOptions>(DEFAULT_CNN_TRAIN_OPTIONS)
   const [training, setTraining] = useState<CnnTrainingDisplay>(EMPTY_CNN_TRAINING)
   const [evaluation, setEvaluation] = useState<CnnEvaluation | null>(null)
+  const [modelName, setModelName] = useState('CNN Digitos')
+  const [savingModel, setSavingModel] = useState(false)
+  const [saveModelError, setSaveModelError] = useState('')
+  const [publishedVersion, setPublishedVersion] = useState<RegisteredVersion | null>(null)
+
 
   const loadProject = useCallback(async (signal?: { cancelled: boolean }) => {
     setChecking(true)
@@ -217,50 +235,170 @@ export function CnnPage() {
 
   useEffect(() => () => {
     loadAbort.current?.abort()
+    startAbort.current?.abort()
     session.current?.dispose()
+    // Si se abandona la pantalla no se promete que la última RPC alcance el servidor.
+    if (persistence.current && !persistence.current.terminalQueued) persistence.current.finish('interrupted')
   }, [])
 
   // Una nueva identidad o proyecto no debe reutilizar datos/modelos de la sesión anterior.
   useEffect(() => {
     loadAbort.current?.abort()
+    startAbort.current?.abort()
     session.current?.dispose()
     session.current = null
+    sourceFile.current = null
+    if (persistence.current && !persistence.current.terminalQueued) persistence.current.finish('interrupted')
+    persistence.current = null
+    setRunId('')
+    setSavedEpochs(0)
+    setEvaluationSaved(false)
+    setSyncState('idle')
+    setSyncError('')
     setDataset(null)
     setTraining(EMPTY_CNN_TRAINING)
     setEvaluation(null)
+    setPublishedVersion(null)
+    setSaveModelError('')
     setSampleError('')
   }, [projectId, userId])
 
-  /** Recibe únicamente métricas reales del motor de TensorFlow.js. */
-  function handleTrainingEvent(event: CnnTrainingEvent) {
-    // El reporte pertenece a la sesión concreta: nunca se reutiliza tras cambiar datos.
-    if (event.type === 'evaluated') { setEvaluation(event.report); return }
+  /** CNN-4B: primero persiste el run y solo entonces inicia TensorFlow.js. */
+  function handleTrainingEvent(event: CnnTrainingEvent, queue: CnnPersistenceQueue) {
+    if (persistence.current !== queue) return
     if (event.type === 'prediction' || event.type === 'prediction-error') return
+    if (event.type === 'status' && event.backend && event.context && event.tfjsVersion) {
+      queue.runtime(event.backend, event.context, event.tfjsVersion)
+    }
+    if (event.type === 'epoch') queue.epoch(event.metrics)
+    if (event.type === 'evaluated') {
+      setEvaluation(event.report)
+      queue.evaluation(event.report)
+      return
+    }
+    if (event.type === 'completed') queue.finish('completed', event.durationMs)
+    if (event.type === 'cancelled') queue.finish('cancelled')
+    if (event.type === 'error') queue.finish('failed', undefined, event.message)
     setTraining((previous) => {
       switch (event.type) {
-        case 'status': return { ...previous, phase: 'running', message: event.message, backend: event.backend ?? previous.backend, trainingCount: event.trainingCount ?? previous.trainingCount, validationCount: event.validationCount ?? previous.validationCount, testCount: event.testCount ?? previous.testCount }
+        case 'status': return { ...previous, phase: previous.phase === 'stopping' ? 'stopping' : 'running', message: event.message,
+          backend: event.backend ?? previous.backend,
+          trainingCount: event.trainingCount ?? previous.trainingCount,
+          validationCount: event.validationCount ?? previous.validationCount,
+          testCount: event.testCount ?? previous.testCount }
         case 'batch': return { ...previous, progress: Math.max(previous.progress, (event.epoch - 1 + event.batch / event.batches) / event.epochs) }
         case 'epoch': return { ...previous, epochs: [...previous.epochs, event.metrics], progress: Math.max(previous.progress, event.metrics.epoch / trainOptions.epochs) }
-        case 'completed': return { ...previous, phase: 'completed', message: 'Entrenamiento terminado.', durationMs: event.durationMs, backend: event.backend, progress: 1 }
-        case 'cancelled': return { ...previous, phase: 'cancelled', message: 'Entrenamiento cancelado.' }
+        case 'completed': return { ...previous, phase: 'completed', message: 'CNN entrenada localmente. Confirmando guardado…',
+          durationMs: event.durationMs, backend: event.backend, progress: 1 }
+        case 'cancelled': return { ...previous, phase: 'cancelled', message: 'Cancelación local confirmada.' }
         case 'error': return { ...previous, phase: 'error', message: event.message }
+        // Eventos de exportación del modelo no modifican el estado del entrenamiento.
+        default: return previous
       }
     })
   }
 
-  function startTraining() {
-    if (training.phase === 'running') return
-    if (!dataset || membership?.role !== 'engineer' || project?.status !== 'active' || describeCnn(config, input).errors.length || trainOptions.samples > dataset.count) return
+  async function startTraining() {
+    if (isBusy || !dataset || !sourceFile.current || membership?.role !== 'engineer' ||
+      project?.status !== 'active' || describeCnn(config, input).errors.length ||
+      trainOptions.samples > dataset.count) return
+    const file = sourceFile.current
+    const controller = new AbortController()
+    startAbort.current = controller
     session.current?.dispose()
+    session.current = null
+    persistence.current = null
+    setRunId('')
     setEvaluation(null)
-    setTraining({ ...EMPTY_CNN_TRAINING, phase: 'running', message: 'Iniciando TensorFlow.js…' })
-    // Copias independientes: los selectores no alteran una ejecución en marcha.
-    session.current = startCnnTraining(structuredClone(config), { ...trainOptions }, handleTrainingEvent, dataset)
+    setPublishedVersion(null)
+    setSaveModelError('')
+    setSavedEpochs(0)
+    setEvaluationSaved(false)
+    setSyncError('')
+    setSyncState('idle')
+    setTraining({ ...EMPTY_CNN_TRAINING, phase: 'starting', message: 'Calculando SHA-256 del archivo completo…' })
+    try {
+      // Se calcula la huella de todo el archivo, no de las 2 000 filas retenidas.
+      const hash = await sha256LocalFile(file, controller.signal)
+      if (controller.signal.aborted) { setTraining({ ...EMPTY_CNN_TRAINING, phase: 'cancelled', message: 'Preparación cancelada.' }); return }
+      setTraining((previous) => ({ ...previous, message: 'Registrando ejecución y configuración en Supabase…' }))
+      const id = await createCnnRun(projectId, dataset, file.size, hash, config, trainOptions)
+      const queue: CnnPersistenceQueue = createCnnPersistenceQueue(id, {
+        runtime: recordCnnRuntime,
+        epoch: recordCnnEpoch,
+        evaluation: recordCnnEvaluation,
+        finish: finishCnnRun,
+      }, {
+        epochConfirmed: (epoch) => { if (persistence.current === queue) setSavedEpochs(epoch) },
+        evaluationConfirmed: () => { if (persistence.current === queue) setEvaluationSaved(true) },
+        finishedConfirmed: () => { if (persistence.current === queue) setSyncState('confirmed') },
+        failed: (message) => {
+          if (persistence.current !== queue) return
+          setSyncState('error')
+          setSyncError(message)
+          session.current?.cancel() // Nunca afirmar que se guardó un resultado no confirmado.
+        },
+      })
+      persistence.current = queue
+      setRunId(id)
+      setSyncState('pending')
+      if (controller.signal.aborted) {
+        setTraining({ ...EMPTY_CNN_TRAINING, phase: 'cancelled', message: 'Preparación cancelada.' })
+        queue.finish('cancelled')
+        return
+      }
+      // El motor recibe instantáneas y no reusa valores de formularios mutables.
+      session.current = startCnnTraining(structuredClone(config), { ...trainOptions },
+        (event) => handleTrainingEvent(event, queue), dataset)
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'No se pudo crear la ejecución CNN.'
+      // Si la RPC de creación terminó pero falló el inicio del Worker, cerrar el run creado.
+      if (persistence.current && !persistence.current.terminalQueued) persistence.current.finish('failed', undefined, message)
+      setTraining({ ...EMPTY_CNN_TRAINING,
+        phase: controller.signal.aborted ? 'cancelled' : 'error',
+        message: controller.signal.aborted ? 'Preparación cancelada.' : message })
+    } finally {
+      if (startAbort.current === controller) startAbort.current = null
+    }
+  }
+
+  /** Publicación F5: solo si CNN-4B confirmó el estado y la evaluación remotos. */
+  async function publishCnnModel() {
+    if (savingModel || !session.current || !runId || !canTrain ||
+      syncState !== 'confirmed' || !evaluationSaved || training.phase !== 'completed') return
+    const currentSession = session.current
+    const name = modelName.trim()
+    if (name.length < 1 || name.length > 120) {
+      setSaveModelError('Escribe un nombre de modelo de 1 a 120 caracteres.')
+      return
+    }
+    setSavingModel(true)
+    setSaveModelError('')
+    setPublishedVersion(null)
+    try {
+      const bundle = await currentSession.exportModel()
+      if (session.current !== currentSession) throw new Error('La sesión CNN cambió durante la exportación.')
+      // RPC reservada + dos objetos privados + RPC publicación; no se finge éxito.
+      const version = await saveModelVersion(runId, name, bundle)
+      if (session.current === currentSession) setPublishedVersion(version)
+    } catch (cause) {
+      setSaveModelError(cause instanceof Error ? cause.message : 'No se pudo publicar la CNN.')
+    } finally { setSavingModel(false) }
+  }
+
+  function cancelTraining() {
+    if (startAbort.current) {
+      startAbort.current.abort()
+      // Si la RPC ya se ejecutó, startTraining confirma el estado al volver.
+      return
+    }
+    session.current?.cancel()
+    setTraining((previous) => previous.phase === 'running' ? { ...previous, phase: 'stopping', message: 'Cancelación solicitada…' } : previous)
   }
 
   /** Importa imágenes solo en memoria, sin red y sin alterar un entrenamiento activo. */
   async function loadFile(file: File) {
-    if (training.phase === 'running') return
+    if (isBusy) return
     loadAbort.current?.abort()
     const controller = new AbortController()
     loadAbort.current = controller
@@ -272,7 +410,16 @@ export function CnnPage() {
         // El modelo anterior no debe clasificar imágenes de otro CSV.
         session.current?.dispose()
         session.current = null
+        sourceFile.current = file
+        persistence.current = null
+        setRunId('')
+        setSavedEpochs(0)
+        setEvaluationSaved(false)
+        setSyncState('idle')
+        setSyncError('')
         setEvaluation(null)
+        setPublishedVersion(null)
+        setSaveModelError('')
         setDataset(loaded)
         setTrainOptions((previous) => ({ ...previous, samples: Math.min(previous.samples, loaded.count) }))
         setTraining(EMPTY_CNN_TRAINING)
@@ -286,10 +433,18 @@ export function CnnPage() {
 
   /** Cambiar la red invalida pesos y evaluación antiguos; evita predicciones obsoletas. */
   function changeConfig(next: CnnConfig) {
-    if (training.phase === 'running') return
+    if (isBusy) return
     session.current?.dispose()
     session.current = null
+    persistence.current = null
+    setRunId('')
+    setSavedEpochs(0)
+    setEvaluationSaved(false)
+    setSyncState('idle')
+    setSyncError('')
     setEvaluation(null)
+    setPublishedVersion(null)
+    setSaveModelError('')
     setTraining(EMPTY_CNN_TRAINING)
     setConfig(next)
   }
@@ -302,22 +457,39 @@ export function CnnPage() {
   const input: CnnInputShape = dataset
     ? { width: dataset.width, height: dataset.height, channels: dataset.channels, classes: dataset.classNames.length }
     : { width: 28, height: 28, channels: 1, classes: 10 }
-  const isTraining = training.phase === 'running'
-  const canConfigure = canTrain && !isTraining
+  const isTraining = training.phase === 'running' || training.phase === 'starting' || training.phase === 'stopping'
+  const isBusy = isTraining || loadingSamples || syncState === 'pending' || savingModel
+  const canConfigure = canTrain && !isBusy
   return <div className="space-y-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
         <p className="text-xs text-[var(--muted)]"><Link className="underline-offset-4 hover:underline" to={`/proyectos/${projectId}`}>{project.name}</Link> <ArrowRight className="mx-1 inline size-3" /> CNN</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Red convolucional (CNN)</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">Adjunta un CSV, entrena, evalúa con datos reservados y clasifica imágenes. El modelo permanece solo durante esta sesión del navegador.</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">Adjunta un CSV, entrena, evalúa con datos reservados y clasifica imágenes. Las métricas se registran en Supabase y puedes publicar versiones inmutables de los pesos CNN al finalizar.</p>
       </div>
       <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-xs font-semibold">{dataset ? `${dataset.width} × ${dataset.height} · ${dataset.name}` : 'Dataset local · CSV'}</span>
     </header>
     <Tabs label="Secciones del módulo CNN" idPrefix="cnn" items={TABS} value={tab} onChange={(next) => setTab(next as ViewId)} />
     <div id={`cnn-panel-${tab}`} role="tabpanel" aria-labelledby={`cnn-tab-${tab}`} tabIndex={0} className="min-w-0 focus-visible:outline-2 focus-visible:outline-[var(--focus)]">
-      {tab === 'datos' && <CnnDataView dataset={dataset} loading={loadingSamples} error={sampleError} onFile={(file) => void loadFile(file)} disabled={isTraining} />}
-      {tab === 'arquitectura' && <CnnArchitectureView config={config} setConfig={changeConfig} canConfigure={canConfigure} isTraining={isTraining} input={input} />}
-      {tab === 'entrenar' && <CnnTrainingPanel options={trainOptions} setOptions={setTrainOptions} display={training} canTrain={canTrain} architectureValid={describeCnn(config, input).errors.length === 0} datasetCount={dataset?.count ?? 0} datasetName={dataset?.name ?? null} onStart={startTraining} onCancel={() => session.current?.cancel()} />}
+      {tab === 'datos' && <CnnDataView dataset={dataset} loading={loadingSamples} error={sampleError} onFile={(file) => void loadFile(file)} disabled={isBusy} />}
+      {tab === 'arquitectura' && <CnnArchitectureView config={config} setConfig={changeConfig} canConfigure={canConfigure} isTraining={isBusy} input={input} />}
+      {tab === 'entrenar' && <div className="space-y-5">
+        <CnnTrainingPanel publishing={savingModel} options={trainOptions} setOptions={setTrainOptions} display={training} canTrain={canTrain} architectureValid={describeCnn(config, input).errors.length === 0} datasetCount={dataset?.count ?? 0} datasetName={dataset?.name ?? null} onStart={() => void startTraining()} onCancel={cancelTraining}
+          save={{ runId, savedEpochs, evaluationSaved, state: syncState, error: syncError }}/>
+        {training.phase === 'completed' && canTrain && <Surface className="space-y-4 p-5 sm:p-6">
+          <header className="flex items-center gap-2"><Save size={19}/><h2 className="text-lg font-semibold">Guardar versión CNN</h2></header>
+          <p className="text-sm text-[var(--muted)]">Los pesos se serializan localmente y se guardan en el bucket privado de modelos.
+            La versión solo se publica al confirmar la subida y la escritura en Supabase.</p>
+          <div className="max-w-md"><InputField id="cnn-model-name" label="Nombre del modelo" value={modelName} maxLength={120}
+            disabled={savingModel} onChange={(event) => {setModelName(event.target.value); setPublishedVersion(null)}}/></div>
+          <Button type="button" busy={savingModel} disabled={!runId || syncState !== 'confirmed' || !evaluationSaved || !!publishedVersion}
+            onClick={() => void publishCnnModel()}><Save size={16}/> Guardar versión inmutable</Button>
+          {(syncState !== 'confirmed' || !evaluationSaved) && <Notice>Espera la confirmación de todas las épocas, la evaluación y el estado final antes de publicar.</Notice>}
+          {saveModelError && <Notice tone="error">{saveModelError}</Notice>}
+          {publishedVersion && <Notice tone="success">Versión v{publishedVersion.version} publicada y verificada. Puedes recuperarla desde{' '}
+            <Link className="underline" to={`/proyectos/${projectId}/modelos`}>Modelos privados</Link> sin importar el CSV.</Notice>}
+        </Surface>}
+      </div>}
       {tab === 'evaluar' && <CnnEvaluationPanel report={training.phase === 'completed' ? evaluation : null} inputSize={input.width} onTrain={() => setTab('entrenar')} />}
       {tab === 'predecir' && <CnnPredictionPanel report={training.phase === 'completed' ? evaluation : null} input={input} onPredict={(pixels) => session.current?.predict(pixels) ?? Promise.reject(new Error('No hay una CNN entrenada en esta sesión.'))} onTrain={() => setTab('entrenar')} />}
     </div>

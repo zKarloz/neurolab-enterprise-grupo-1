@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { LoaderCircle, LockKeyhole, Settings2, WifiOff } from 'lucide-react'
+import { LockKeyhole, Settings2, WifiOff } from 'lucide-react'
+import { Spinner } from './Spinner'
 import { Button } from './Button'
 
 interface PageStateProps {
@@ -17,7 +18,7 @@ export function PageState({ kind, onRetry, onSignOut }: PageStateProps) {
     catch { setSignOutError(true) }
   }
   const details = {
-    loading: { icon: LoaderCircle, title: 'Verificando acceso', description: 'Validando sesión y permisos en Supabase…' },
+    loading: { icon: null, title: 'Verificando acceso', description: 'Validando sesión y permisos en Supabase…' },
     blocked: { icon: LockKeyhole, title: 'Acceso no autorizado', description: 'Tu cuenta no tiene un perfil activo. Contacta al administrador si necesitas acceso.' },
     config: { icon: Settings2, title: 'Configura Supabase', description: 'Faltan las variables públicas VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY. Consulta el README para habilitar el acceso.' },
     error: { icon: WifiOff, title: 'Servicio no disponible', description: 'No se pudo verificar la sesión o los permisos. Comprueba la conexión y vuelve a intentar.' },
@@ -26,8 +27,8 @@ export function PageState({ kind, onRetry, onSignOut }: PageStateProps) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--page)] p-6">
       <div className="w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-8 text-center shadow-sm">
-        <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-[var(--surface-muted)]">
-          <Icon aria-hidden="true" className={`size-6 ${kind === 'loading' ? 'animate-spin' : ''}`} />
+        <div className={`mx-auto mb-5 grid ${kind === 'loading' ? 'min-h-14 px-3' : 'size-14'} place-items-center rounded-2xl bg-[var(--surface-muted)]`}>
+          {kind === 'loading' ? <Spinner size="md" label="Verificando…" /> : Icon ? <Icon aria-hidden="true" className="size-6" /> : null}
         </div>
         <h1 className="text-2xl font-semibold tracking-tight">{details.title}</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{details.description}</p>

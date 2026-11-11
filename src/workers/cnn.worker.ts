@@ -26,6 +26,21 @@ self.onmessage = (event: MessageEvent<CnnWorkerCommand>) => {
       .catch((error: unknown) => self.postMessage({ type: 'prediction-error', requestId, message: error instanceof Error ? error.message : 'No se pudo predecir.' } satisfies CnnTrainingEvent))
     return
   }
+  if (command.type === 'export-model') {
+    const { requestId } = command
+    if (active || !runtime) {
+      self.postMessage({ type: 'model-export-error', requestId, message: 'CNN no disponible para exportación.' } satisfies CnnTrainingEvent)
+      return
+    }
+    void runtime.exportModel()
+      .then((bundle) => {
+        // Los pesos se transfieren al hilo principal sin copiar otra vez el ArrayBuffer.
+        self.postMessage({ type: 'model-exported', requestId, bundle } satisfies CnnTrainingEvent, [bundle.weightData])
+      })
+      .catch((error: unknown) => self.postMessage({ type: 'model-export-error', requestId,
+        message: error instanceof Error ? error.message : 'No se pudo serializar la CNN.' } satisfies CnnTrainingEvent))
+    return
+  }
   if (active) return
   runtime?.dispose(); runtime = null
   active = true

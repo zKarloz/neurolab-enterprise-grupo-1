@@ -2,6 +2,7 @@
 import type { CnnConfig } from './architecture.ts'
 import type { LocalImageDataset } from './localImageCsv.ts'
 import type { CnnEvaluation } from './cnnEvaluation.ts'
+import type { ModelArtifactBundle } from '../models/artifacts.ts'
 
 export interface CnnTrainOptions {
   samples: number
@@ -22,7 +23,7 @@ export interface CnnEpochMetrics {
 }
 
 export type CnnTrainingEvent =
-  | { type: 'status'; stage: 'download' | 'prepare' | 'fit' | 'evaluate'; message: string; backend?: string; trainingCount?: number; validationCount?: number; testCount?: number }
+  | { type: 'status'; stage: 'download' | 'prepare' | 'fit' | 'evaluate'; message: string; backend?: string; context?: 'worker' | 'main'; tfjsVersion?: string; trainingCount?: number; validationCount?: number; testCount?: number }
   | { type: 'batch'; epoch: number; batch: number; batches: number; epochs: number }
   | { type: 'epoch'; metrics: CnnEpochMetrics }
   | { type: 'evaluated'; report: CnnEvaluation }
@@ -31,11 +32,14 @@ export type CnnTrainingEvent =
   | { type: 'error'; message: string }
   | { type: 'prediction'; requestId: number; probabilities: number[] }
   | { type: 'prediction-error'; requestId: number; message: string }
+  | { type: 'model-exported'; requestId: number; bundle: ModelArtifactBundle }
+  | { type: 'model-export-error'; requestId: number; message: string }
 
 export type CnnWorkerCommand =
   | { type: 'start'; config: CnnConfig; options: CnnTrainOptions; dataset: LocalImageDataset }
   | { type: 'cancel' }
   | { type: 'predict'; requestId: number; pixels: Uint8Array }
+  | { type: 'export-model'; requestId: number }
 
 /** Rechazo preventivo de solicitudes fuera de los límites de memoria establecidos. */
 export function validateCnnTrainOptions(options: CnnTrainOptions) {

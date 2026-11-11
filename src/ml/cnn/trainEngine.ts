@@ -7,10 +7,12 @@ import * as tf from '@tensorflow/tfjs'
 import { describeCnn, type CnnConfig, type CnnInputShape } from './architecture.ts'
 import { type LocalImageDataset } from './localImageCsv.ts'
 import { computeCnnEvaluation, splitCnnHoldoutIndices, type CnnEvaluation, type CnnTestSample } from './cnnEvaluation.ts'
+import { serializeDenseModel, type ModelArtifactBundle } from '../models/artifacts.ts'
 import { readCnnEpochMetrics, validateCnnTrainOptions, type CnnTrainingEvent, type CnnTrainOptions } from './trainingTypes.ts'
 
 export interface TrainedCnnRuntime {
   predict: (pixels: Uint8Array) => Promise<number[]>
+  exportModel: () => Promise<ModelArtifactBundle>
   dispose: () => void
 }
 
@@ -124,7 +126,7 @@ export async function trainCnnModel(
     await tf.ready()
     const backend = tf.getBackend()
     if (cancelled() || signal.aborted) { emit({ type: 'cancelled' }); return null }
-    emit({ type: 'status', stage: 'prepare', message: 'Preparando imágenes locales…', backend })
+    emit({ type: 'status', stage: 'prepare', message: 'Preparando imágenes locales…', backend, context: environment, tfjsVersion: tf.version.tfjs })
     const area = input.height * input.width * input.channels
     const pixels = dataset.pixels.subarray(0, area * options.samples)
     const labels = dataset.labels.subarray(0, options.samples)
@@ -168,6 +170,8 @@ export async function trainCnnModel(
     emit({ type: 'completed', durationMs: Date.now() - started, backend, epochsCompleted })
     return {
       predict: (image) => predictPixels(retained, image, input),
+      // El IOHandler de F5 admite cualquier tf.LayersModel, incluidas Conv2D.
+      exportModel: () => serializeDenseModel(retained),
       dispose: () => retained.dispose(),
     }
   } catch (error) {

@@ -3,11 +3,10 @@ import { GitCompareArrows } from 'lucide-react'
 import { Notice } from '../../components/ui/Notice'
 import { Surface } from '../../components/ui/Surface'
 import { buildValidationComparison, compareTestMetrics } from '../../ml/evaluation/comparison.ts'
-import type { EpochMetrics } from '../../ml/training/types.ts'
-import type { TestEvaluation } from '../../ml/evaluation/metrics.ts'
-import type { HistoryRun } from '../../services/evaluationPersistence.ts'
+import type { HistoryRun, HistoryDetail } from '../../services/evaluationPersistence.ts'
+import { familyForProblem, familyLabel } from '../../ml/evaluation/families.ts'
 
-type RunDetail = { epochs: EpochMetrics[]; evaluation: TestEvaluation | null }
+type RunDetail = HistoryDetail
 interface Props { first: HistoryRun; second: HistoryRun; firstDetail: RunDetail; secondDetail: RunDetail }
 
 function show(value: number | null): string {
@@ -24,7 +23,7 @@ export function RunComparison({ first, second, firstDetail, secondDetail }: Prop
   const labels = [first.id.slice(0, 8), second.id.slice(0, 8)]
   return <Surface className="space-y-4 p-5 sm:p-7">
     <div className="flex flex-wrap items-center gap-2"><GitCompareArrows size={20}/><h3 className="text-lg font-semibold">Comparación de dos ejecuciones</h3></div>
-    <p className="text-xs text-[var(--muted)]">A: {first.id} · B: {second.id}. Datos leídos de Supabase y protegidos por RLS.</p>
+    <p className="text-xs text-[var(--muted)]">Familia: {familyLabel(familyForProblem(first.problem_type))}. A: {first.id} · B: {second.id}. Datos leídos de Supabase y protegidos por RLS.</p>
     <div className="overflow-x-auto"><table className="w-full min-w-[360px] text-left text-sm">
       <thead><tr className="border-b border-[var(--line)]"><th className="p-2">Medida</th><th className="p-2 font-semibold text-[var(--chart-train)]">A · {labels[0]}</th><th className="p-2 font-semibold text-[var(--chart-validation)]">B · {labels[1]}</th></tr></thead>
       <tbody>
@@ -33,7 +32,7 @@ export function RunComparison({ first, second, firstDetail, secondDetail }: Prop
         {metrics.map((metric) => <tr key={metric.metric} className="border-b border-[var(--line)] last:border-0"><td className="p-2">{metric.metric}</td><td className="p-2 tabular-nums font-medium text-[var(--chart-train)]">{show(metric.first)}</td><td className="p-2 tabular-nums font-medium text-[var(--chart-validation)]">{show(metric.second)}</td></tr>)}
       </tbody>
     </table></div>
-    {metrics.length === 0 && <Notice>Una o ambas ejecuciones no tienen evaluación de prueba confirmada. La comparación de test queda incompleta.</Notice>}
+    {metrics.length === 0 && <Notice>Una o ambas ejecuciones no tienen evaluación compatible. En CNN deben coincidir también las etiquetas y su orden. No se comparan métricas incompatibles.</Notice>}
     {loss.length > 0 && <div className="space-y-2">
       <h4 className="text-sm font-semibold">Pérdida de validación por época</h4>
       <div className="h-64 w-full" role="img" aria-label="Comparación de pérdidas de validación confirmadas de dos ejecuciones">

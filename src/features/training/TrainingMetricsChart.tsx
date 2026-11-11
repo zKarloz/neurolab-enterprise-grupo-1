@@ -1,8 +1,8 @@
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EpochMetrics } from '../../ml/training/types.ts'
-import type { ProblemType } from '../../ml/preprocessing/types.ts'
+import type { TrainingProblemType } from '../../ml/evaluation/families.ts'
 
-type Props = { epochs: EpochMetrics[]; problemType: ProblemType }
+type Props = { epochs: EpochMetrics[]; problemType: TrainingProblemType }
 
 /** Gráfica incremental: muestra exclusivamente los datos recibidos de onEpochEnd. */
 export function TrainingMetricsChart({ epochs, problemType }: Props) {
@@ -13,7 +13,7 @@ export function TrainingMetricsChart({ epochs, problemType }: Props) {
     trainMetric: entry.metric,
     validationMetric: entry.validationMetric,
   }))
-  const metricLabel = problemType === 'binary' ? 'Exactitud' : 'MAE'
+  const metricLabel = problemType === 'regression' ? 'MAE' : 'Exactitud'
   const tooltipContentStyle = {
     backgroundColor: 'var(--surface)', border: '1px solid var(--line)',
     borderRadius: '12px', color: 'var(--ink)', fontSize: '12px',
@@ -47,7 +47,7 @@ export function TrainingMetricsChart({ epochs, problemType }: Props) {
             <LineChart data={data} margin={{ top: 8, right: 12, bottom: 6, left: 0 }}>
               <CartesianGrid stroke="var(--line)" strokeDasharray="3 4" />
               <XAxis dataKey="epoch" allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 11 }} />
-              <YAxis domain={problemType === 'binary' ? [0, 1] : ['auto', 'auto']} width={50} tick={{ fill: 'var(--muted)', fontSize: 11 }} tickFormatter={(v: number) => Number(v).toPrecision(3)} />
+              <YAxis domain={problemType === 'regression' ? ['auto', 'auto'] : [0, 1]} width={50} tick={{ fill: 'var(--muted)', fontSize: 11 }} tickFormatter={(v: number) => Number(v).toPrecision(3)} />
               <Tooltip contentStyle={tooltipContentStyle} formatter={(value) =>
                 typeof value === 'number' ? Number(value.toFixed(6)) : (value ?? '—')
               } />

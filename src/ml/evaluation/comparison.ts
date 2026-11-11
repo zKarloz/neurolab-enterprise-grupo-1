@@ -1,10 +1,11 @@
 import type { TestEvaluation } from './metrics.ts'
+import type { CnnStoredEvaluation } from './cnnStoredEvaluation.ts'
 import type { EpochMetrics } from '../training/types.ts'
 
 export interface ComparisonRow { metric: string; first: number | null; second: number | null }
 
 /** Solo se comparan problemas del mismo tipo; nunca se inventan evaluaciones ausentes. */
-export function compareTestMetrics(first: TestEvaluation | null, second: TestEvaluation | null): ComparisonRow[] {
+export function compareTestMetrics(first: TestEvaluation | CnnStoredEvaluation | null, second: TestEvaluation | CnnStoredEvaluation | null): ComparisonRow[] {
   if (!first || !second) return []
   if (first.problemType !== second.problemType) throw new Error('No se pueden comparar métricas de tipos de problema distintos.')
   if (first.problemType === 'binary' && second.problemType === 'binary') {
@@ -22,6 +23,17 @@ export function compareTestMetrics(first: TestEvaluation | null, second: TestEva
       { metric: 'RMSE test', first: first.rmse, second: second.rmse },
       { metric: 'MAE test', first: first.mae, second: second.mae },
       { metric: 'R² test', first: first.r2, second: second.r2 },
+    ]
+  }
+  if (first.problemType === 'multiclass' && second.problemType === 'multiclass') {
+    // Las métricas macro son comparables solo si la clase representa el mismo concepto.
+    if (JSON.stringify(first.classNames) !== JSON.stringify(second.classNames)) return []
+    return [
+      { metric: 'Loss test (categorical crossentropy)', first: first.loss, second: second.loss },
+      { metric: 'Accuracy test', first: first.accuracy, second: second.accuracy },
+      { metric: 'Precisión macro', first: first.macroPrecision, second: second.macroPrecision },
+      { metric: 'Recall macro', first: first.macroRecall, second: second.macroRecall },
+      { metric: 'F1 macro', first: first.macroF1, second: second.macroF1 },
     ]
   }
   return []

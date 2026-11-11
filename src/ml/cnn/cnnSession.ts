@@ -7,10 +7,12 @@ import type { CnnConfig } from './architecture.ts'
 import type { LocalImageDataset } from './localImageCsv.ts'
 import type { CnnTrainingEvent, CnnTrainOptions, CnnWorkerCommand } from './trainingTypes.ts'
 import type { TrainedCnnRuntime } from './trainEngine.ts'
+import type { ModelArtifactBundle } from '../models/artifacts.ts'
 
 export interface CnnSession {
   cancel: () => void
   predict: (pixels: Uint8Array) => Promise<number[]>
+  exportModel: () => Promise<ModelArtifactBundle>
   dispose: () => void
 }
 
@@ -29,13 +31,27 @@ export function startCnnTraining(
   let runningMain = false
   let nextRequestId = 0
   const pending = new Map<number, { resolve: (values: number[]) => void; reject: (error: Error) => void }>()
+  const pendingExports = new Map<number, { resolve: (bundle: ModelArtifactBundle) => void; reject: (error: Error) => void }>()
 
   const rejectPending = (message: string) => {
     pending.forEach(({ reject }) => reject(new Error(message)))
     pending.clear()
+    pendingExports.forEach(({ reject }) => reject(new Error(message)))
+    pendingExports.clear()
   }
   const emit = (event: CnnTrainingEvent) => {
     if (disposed) return
+    // La serialización puede llegar después de 'completed'; atenderla antes del
+    // filtro que descarta nuevos eventos de entrenamiento.
+    if (event.type === 'model-exported' || event.type === 'model-export-error') {
+      const request = pendingExports.get(event.requestId)
+      pendingExports.delete(event.requestId)
+      if (request) {
+        if (event.type === 'model-exported') request.resolve(event.bundle)
+        else request.reject(new Error(event.message))
+      }
+      return
+    }
     if (event.type === 'prediction' || event.type === 'prediction-error') {
       const request = pending.get(event.requestId)
       pending.delete(event.requestId)
@@ -116,6 +132,23 @@ export function startCnnTraining(
       const runtime = mainRuntime ?? await mainPromise
       if (!runtime || disposed) throw new Error('Ya no está disponible el modelo temporal.')
       return runtime.predict(pixels)
+    },
+    exportModel: async () => {
+      if (disposed || !completed) throw new Error('Completa primero el entrenamiento CNN antes de guardar una versión.')
+      if (worker) {
+        const requestId = ++nextRequestId
+        return new Promise<ModelArtifactBundle>((resolve, reject) => {
+          pendingExports.set(requestId, { resolve, reject })
+          try { worker!.postMessage({ type: 'export-model', requestId } satisfies CnnWorkerCommand) }
+          catch (cause) {
+            pendingExports.delete(requestId)
+            reject(cause instanceof Error ? cause : new Error('No se pudo solicitar la exportación al Worker.'))
+          }
+        })
+      }
+      const runtime = mainRuntime ?? await mainPromise
+      if (!runtime || disposed) throw new Error('El modelo CNN ya no está disponible para exportar.')
+      return runtime.exportModel()
     },
     dispose: () => {
       if (disposed) return
