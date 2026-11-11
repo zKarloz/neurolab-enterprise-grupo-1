@@ -1,3 +1,7 @@
+# ==========================================
+# Archivos principales
+# ==========================================
+
 node_modules/
 dist/
 .vite/
@@ -8,3 +12,31 @@ dist/
 *.log
 .DS_Store
 coverage/
+
+# ==========================================
+# Archivos auxiliares
+# ==========================================
+
+# Paquetes descargados y respaldos locales
+/*.tar.gz
+/*.tgz
+/*.zip
+
+# Parches temporales de instalación en la raíz
+/*.patch
+
+# Instrucciones temporales de entregas CNN
+/LEEME_CNN*.txt
+/LEEME_CORRECCION_CNN*.txt
+
+# Manifiestos de instalación de la raíz
+/*-manifest.json
+
+# Carpetas auxiliares de entregas anteriores
+/cnn*-payload/
+/fase6-*-payload/
+/role-permissions-payload/
+/payload/
+
+# Archivos temporales de Supabase CLI
+/supabase/.temp/
