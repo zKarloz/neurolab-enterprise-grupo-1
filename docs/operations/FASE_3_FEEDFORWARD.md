@@ -174,3 +174,22 @@ Vercel desplegará automáticamente. Si falta la migración, el inicio del entre
 Las RPC garantizan pertenencia, permisos, integridad referencial, secuencia de épocas y escrituras confirmadas, **no demuestran que el navegador haya calculado realmente esos números**. Se consideran resultados reportados por el cliente, reproducibles con el CSV original.
 
 Todavía pendientes para cerrar la Fase 3: build y entrenamiento real con el parche de persistencia, pruebas RLS live y verificación en Vercel. F4 incorpora evaluación final sobre test e historial completo; F5 artefactos de modelo privados e inmutables. No se adelantaron funciones administrativas de F6.
+
+## Mejora M03 — Feedforward por pestañas
+
+**Interfaz:** el antiguo acceso «Dataset local» se muestra como «Red feedforward · Dense» dentro del proyecto. La ruta histórica `/proyectos/:projectId/datos` permanece válida para no romper marcadores ni enlaces existentes.
+
+**Pestañas compartidas:** Datos, Arquitectura, Entrenar, Evaluar y Predecir utilizan el componente accesible `Tabs`, con navegación de teclado y desplazamiento horizontal en móvil.
+
+- **Datos:** CSV local, selección de objetivo, problema binario o regresión, partición y preprocesamiento reproducible.
+- **Arquitectura:** topología Dense, activaciones y parámetros estimados.
+- **Entrenar:** hiperparámetros, progreso, métricas reales por época, confirmación Supabase y publicación de una versión privada.
+- **Evaluar:** evaluación del test reservado y acceso a ejecuciones guardadas (el historial general sigue en su módulo).
+- **Predecir:** inferencia con el modelo entrenado en la sesión y su manifiesto de preprocesamiento.
+
+**Conservación de estado:** alternar pestañas no desmonta el motor ni pierde los pesos en memoria. Mientras exista entrenamiento o sincronización activos, se bloquea reemplazar el CSV o cambiar objetivo/tipo. Al abandonar la ruta sí se liberan recursos, tal como ocurría anteriormente.
+
+**Seguridad y persistencia:** solo Ingenieros miembros de proyectos activos pueden entrenar y preparar datos; las autorizaciones RPC/RLS permanecen intactas. No hay SQL, cambios de tabla ni envío de filas del CSV a Supabase.
+
+**Validación:** ejecutar `node --test tests/m03.feedforward-tabs.test.mjs`, `npm run typecheck`, `npm run build`. Probar un CSV de clasificación y otro de regresión; comprobar que las pestañas conservan las métricas y la predicción en el navegador.
+

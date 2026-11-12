@@ -80,3 +80,13 @@ Proyecto de prueba archivado.
 ```
 
 Con ello se verifican las restricciones de RLS y RPC de la Fase 2 en Supabase real. Se mantiene la regla de que un Administrador global no hereda permisos técnicos dentro de todos los proyectos. No se requieren nuevas migraciones de Fase 2. Este archivo es el **documento consolidado de la fase**; las migraciones y scripts de prueba permanecen como artefactos ejecutables.
+
+## M02 · Proyectos archivados y restauración (migración 017)
+
+- Archivar no elimina el proyecto: `projects.status` pasa a `archived`, conservando miembros y recursos.
+- En **Proyectos**, el botón **Archivados** abre el filtro existente. Cada proyecto archivado ofrece **Restaurar** solo al Responsable o Administrador global autorizados.
+- `restore_project(uuid)` reactiva el estado y registra `project_restored` de forma transaccional. Requiere al menos un Responsable activo y se limita a proyectos previamente archivados.
+- La restauración no replica datos ni otorga membresías; el Administrador global conserva su restricción sobre recursos técnicos si no es integrante.
+- Migración: `202611120017_restore_archived_projects.sql`. Verificación: `M02_RESTAURACION_PROYECTOS_READONLY.sql`.
+- Se respetan RLS y permisos de lectura para los cuatro roles; la reactivación administrativa sigue siendo una RPC protegida.
+

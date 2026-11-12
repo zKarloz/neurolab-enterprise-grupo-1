@@ -59,6 +59,11 @@ export async function archiveProject(id: string): Promise<void> {
   await write(client().rpc('archive_project', { p_project_id: id }))
 }
 
+/** Reactiva un proyecto archivado a través de una RPC con autorización y auditoría. */
+export async function restoreProject(id: string): Promise<void> {
+  await write(client().rpc('restore_project', { p_project_id: id }))
+}
+
 export async function listMembers(id: string): Promise<ProjectMember[]> {
   const { data, error } = await client().rpc('list_project_members', { p_project_id: id })
   return confirmed(data, error) as ProjectMember[]

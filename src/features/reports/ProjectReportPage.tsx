@@ -9,6 +9,7 @@ import { formatGanReportSummary, ganReportColumns } from '../../ml/evaluation/ga
 import { familyForReportRun, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
 import { Spinner } from '../../components/ui/Spinner'
 import { Surface } from '../../components/ui/Surface'
+import { Tabs } from '../../components/ui/Tabs'
 import { useAuth } from '../auth/AuthProvider'
 import { loadProjectReport, recordExport } from '../../services/reporting'
 import type { ProjectReportSnapshot } from '../../services/reporting'
@@ -17,6 +18,13 @@ import { FormalReportDocument } from './FormalReportDocument'
 import './formalReportPrint.css'
 
 const PAGE_SIZE = 10
+
+/** Las pestañas ordenan la pantalla; el informe PDF permanece completo e independiente. */
+type ReportTab = 'summary' | 'history'
+const REPORT_TABS = [
+  { id: 'summary', label: 'Resumen del proyecto' },
+  { id: 'history', label: 'Historial de entrenamientos' },
+] as const
 const statusNames: Record<string, string> = {
   completed: 'Completada', failed: 'Fallida', cancelled: 'Cancelada',
   interrupted: 'Interrumpida', created: 'Creada', preparing: 'Preparando', running: 'En ejecución',
@@ -37,6 +45,7 @@ export function ProjectReportPage() {
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const [family, setFamily] = useState<FamilyFilter>('all')
+  const [tab, setTab] = useState<ReportTab>('summary')
 
   useEffect(() => {
     let live = true
@@ -114,9 +123,16 @@ export function ProjectReportPage() {
       </div>
     </header>
     {error && <Notice tone="error">{error}</Notice>}
+    <Tabs label="Secciones de reportes" idPrefix="project-reports"
+      items={REPORT_TABS} value={tab}
+      onChange={(next) => { if (next === 'summary' || next === 'history') setTab(next) }} />
+    {/* Resumen del proyecto: identidad y totales sin filtrado por familia. */}
+    {tab === 'summary' && <div id="project-reports-panel-summary" role="tabpanel"
+      aria-labelledby="project-reports-tab-summary" tabIndex={0} className="min-w-0 space-y-6">
     <Surface className="space-y-3 p-5 sm:p-7">
       <div className="flex items-center gap-2"><FileText size={18}/><h2 className="text-lg font-semibold">Ficha de proyecto</h2></div>
-      <p className="break-words text-sm">{data.project.description || 'Sin descripción.'}</p>
+      <p className="text-sm font-medium">{data.project.name}</p>
+      <p className="break-words text-sm text-[var(--muted)]">{data.project.description || 'Este proyecto aún no tiene una descripción registrada.'}</p>
       <p className="text-xs text-[var(--muted)]">Estado: {data.project.status === 'active' ? 'Activo' : 'Archivado'} · Fecha de creación: {new Date(data.project.created_at).toLocaleString('es-PE')}</p>
     </Surface>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -143,8 +159,12 @@ export function ProjectReportPage() {
         <p className="text-xs text-[var(--muted)]">No se incluyen filas del CSV original ni pesos del modelo.</p>
       </Surface>
     </div>
+    </div>}
+    {/* Los resultados detallados solo se montan al seleccionar Historial. */}
+    {tab === 'history' && <div id="project-reports-panel-history" role="tabpanel"
+      aria-labelledby="project-reports-tab-history" tabIndex={0} className="min-w-0">
     <Surface className="space-y-4 p-5 sm:p-7">
-      <h2 className="text-lg font-semibold">Historial de entrenamiento</h2>
+      <h2 className="text-lg font-semibold">Historial de entrenamientos</h2>
       <div className="report-no-print max-w-xs"><SelectField id="report-family" label="Filtrar familias en detalle y exportaciones" value={family} options={[{value:'all',label:'Todas las familias'},{value:'feedforward',label:'Feedforward'},{value:'cnn',label:'CNN'},{value:'rnn',label:'RNN'},{value:'gan',label:'GAN'}]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1) }}/></div>
       <p className="text-xs text-[var(--muted)]">Hasta 200 ejecuciones recientes por proyecto. El filtro afecta al detalle y a las exportaciones CSV/PDF; los totales globales no cambian. Si existen más de 200 ejecuciones, este filtro solo cubre la muestra consultada.</p>
       {filteredRuns.length === 0 ? <Notice>No hay ejecuciones para la familia seleccionada en la muestra reciente.</Notice> : <div className="report-table overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="p-3">Fecha</th><th className="p-3">Familia</th><th className="p-3">Arquitectura</th><th className="p-3">Estado</th><th className="p-3">Épocas</th><th className="p-3">Resultado / resumen</th></tr></thead>
@@ -154,6 +174,8 @@ export function ProjectReportPage() {
         })}</tbody></table></div>}
       <div className="report-no-print"><Pagination page={page} pageSize={PAGE_SIZE} total={filteredRuns.length} onPageChange={setPage}/></div>
     </Surface>
+    </div>}
+    <p className="text-xs text-[var(--muted)]">Las exportaciones CSV/PDF utilizan el filtro elegido en Historial. La ficha y los totales generales se conservan para el proyecto completo.</p>
     <p className="text-xs text-[var(--muted)]">Informe emitido desde NeuroLab Enterprise · {new Date().toLocaleString('es-PE')}. Las exportaciones autorizadas generan eventos de auditoría de solicitud.</p>
     </div>
     <FormalReportDocument data={data} familyFilter={family} preparedBy={state.status === 'ready' ? state.profile.display_name : 'Usuario autorizado'} />

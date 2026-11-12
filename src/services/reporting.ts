@@ -27,7 +27,7 @@ export const EXPORT_LIMIT = 200
 // El Admin solo consulta hechos administrativos; las políticas RLS del servidor
 // siguen limitando los datos, aunque se manipule JavaScript en el navegador.
 const ADMIN_AUDIT_ACTIONS = [
-  'project_created', 'project_updated', 'project_archived',
+  'project_created', 'project_updated', 'project_archived', 'project_restored',
   'member_added', 'member_role_changed', 'member_removed',
   'admin_user_created', 'admin_user_activated', 'admin_user_deactivated',
   'admin_password_reset', 'audit_export_requested',
@@ -35,7 +35,7 @@ const ADMIN_AUDIT_ACTIONS = [
 
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
   project_created: 'Proyecto creado', project_updated: 'Proyecto actualizado',
-  project_archived: 'Proyecto archivado', member_added: 'Integrante agregado',
+  project_archived: 'Proyecto archivado', project_restored: 'Proyecto restaurado', member_added: 'Integrante agregado',
   member_role_changed: 'Rol modificado', member_removed: 'Integrante retirado',
   training_started: 'Entrenamiento iniciado', training_completed: 'Entrenamiento finalizado',
   training_failed: 'Entrenamiento fallido', training_cancelled: 'Entrenamiento cancelado',

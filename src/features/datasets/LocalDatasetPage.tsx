@@ -5,8 +5,10 @@ import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { SelectField } from '../../components/ui/SelectField'
 import { Surface } from '../../components/ui/Surface'
+import { Tabs } from '../../components/ui/Tabs'
 import { useAuth } from '../auth/AuthProvider'
 import { DenseTrainingPanel } from '../training/DenseTrainingPanel'
+import type { FeedforwardTab } from '../training/DenseTrainingPanel'
 import { RecentTrainingRuns } from '../training/RecentTrainingRuns'
 import { getProject } from '../../services/projects'
 import { supabase } from '../../lib/supabase'
@@ -17,11 +19,22 @@ import { analyzeObjective } from '../../ml/preprocessing/targetAnalysis.ts'
 import { MAX_CSV_BYTES, MAX_CSV_ROWS, readLocalCsv } from '../../ml/preprocessing/readCsv.ts'
 import type { PreparedDataset, ProblemType, RawTable } from '../../ml/preprocessing/types.ts'
 
-/** Primera pantalla de Fase 3: comprueba rol de Ingeniero antes de preparar datos locales. */
+// Misma navegación accesible que CNN, RNN y GAN; no cambia los endpoints guardados.
+const FEEDFORWARD_TABS = [
+  { id: 'datos', label: 'Datos' },
+  { id: 'arquitectura', label: 'Arquitectura' },
+  { id: 'entrenar', label: 'Entrenar' },
+  { id: 'evaluar', label: 'Evaluar' },
+  { id: 'predecir', label: 'Predecir' },
+] as const
+
+/** Preparación y entrenamiento Feedforward con autorización del Ingeniero del proyecto. */
 export function LocalDatasetPage() {
   const { projectId = '' } = useParams()
   const { state } = useAuth()
   const userId = state.status === 'ready' ? state.user.id : ''
+  const [tab, setTab] = useState<FeedforwardTab>('datos')
+  const [trainingBusy, setTrainingBusy] = useState(false)
   const [permission, setPermission] = useState<'loading' | 'allowed' | 'denied'>('loading')
   const [projectName, setProjectName] = useState('')
   const [table, setTable] = useState<RawTable | null>(null)
@@ -56,6 +69,8 @@ export function LocalDatasetPage() {
   useEffect(() => { void authorize() }, [authorize])
 
   async function loadFile(file: File | undefined) {
+    // No desmontar un Worker activo sustituyendo el dataset desde otra pestaña.
+    if (trainingBusy) return
     setTable(null)
     setPrepared(null)
     setTarget('')
@@ -79,7 +94,7 @@ export function LocalDatasetPage() {
   }
 
   function prepare() {
-    if (!table || !target || !source) return
+    if (trainingBusy || !table || !target || !source) return
     setError('')
     setPrepared(null)
     try {
@@ -99,48 +114,68 @@ export function LocalDatasetPage() {
   return (
     <div className="space-y-7">
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Preparar un CSV</h1>
-        <p className="mt-3 text-sm text-[var(--muted)]">{projectName} · El CSV se procesa solo en tu navegador y no se sube a Supabase.</p>
+        <h1 className="text-3xl font-semibold tracking-tight">Red feedforward (Dense)</h1>
+        <p className="mt-3 text-sm text-[var(--muted)]">{projectName} · Prepara datos, configura la red, entrena, evalúa y predice sin subir el CSV a Supabase.</p>
       </header>
-      <Surface className="space-y-5 p-5 sm:p-7">
-        <div className="flex items-center gap-3"><FileSpreadsheet size={21} aria-hidden="true"/><h2 className="text-lg font-semibold">Importación local</h2></div>
-        <p className="text-sm leading-6 text-[var(--muted)]">Límite: {MAX_CSV_BYTES / 1024 / 1024} MiB y {MAX_CSV_ROWS.toLocaleString('es-PE')} filas, lo que se alcance primero. Se requiere cabecera.</p>
-        <label htmlFor="csv-file" className="block text-sm font-medium">Archivo CSV</label>
-        <input id="csv-file" type="file" accept=".csv,text/csv" disabled={busy} onChange={(event) => void loadFile(event.target.files?.[0])}
-          className="block w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-[var(--surface-muted)] file:px-4 file:py-2 file:text-[var(--ink)]" />
-        {busy && <p role="status" className="text-sm text-[var(--muted)]">Validando el CSV local…</p>}
-        {table && <p role="status" className="text-sm">{filename}: <strong>{table.rows.length}</strong> filas y <strong>{table.columns.length}</strong> columnas.</p>}
-      </Surface>
-      {table && <Surface className="space-y-5 p-5 sm:p-7">
-        <h2 className="text-lg font-semibold">Preparación reproducible</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField id="target-column" label="Columna objetivo" value={target} options={table.columns.map((column) => ({ value: column, label: column }))}
-            onChange={(event) => { setTarget(event.target.value); setProblemType(analyzeObjective(table, event.target.value).recommended ?? 'binary'); setPrepared(null) }}/>
-          <SelectField id="problem-type" label="Problema" value={problemType} options={[{ value: 'binary', label: 'Clasificación binaria' }, { value: 'regression', label: 'Regresión' }]}
-            onChange={(event) => { setProblemType(event.target.value as ProblemType); setPrepared(null) }}/>
-        </div>
-        {targetAnalysis && <Notice>
-          <strong>Análisis de objetivo:</strong> {targetAnalysis.distinctValues} valores distintos. {targetAnalysis.reason}
-          {targetAnalysis.recommended && targetAnalysis.recommended !== problemType && ' La selección actual es técnicamente posible solo cuando sus valores son compatibles, pero puede no representar bien el problema.'}
-        </Notice>}
-        <p className="text-xs text-[var(--muted)]">Partición 70/15/15, semilla 42, estandarización con estadísticas exclusivas de entrenamiento y codificación de categorías.</p>
-        <Button type="button" onClick={prepare} disabled={busy}>Validar y preparar</Button>
-      </Surface>}
-      {error && <Notice tone="error">{error}</Notice>}
-      {prepared && <Surface className="space-y-4 p-5 sm:p-7">
-        <h2 className="text-lg font-semibold">Datos preparados en memoria</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            ['Entrenamiento', prepared.train.x.length],
-            ['Validación', prepared.validation.x.length],
-            ['Prueba', prepared.test.x.length],
-            ['Características', prepared.manifest.featureNames.length],
-          ].map(([label, value]) => <div key={label} className="rounded-xl bg-[var(--surface-muted)] p-4"><p className="text-xs text-[var(--muted)]">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>)}
-        </div>
-        <Notice>Partición y transformaciones calculadas localmente. Puedes configurar y entrenar una Feedforward Dense debajo sin subir el CSV.</Notice>
-      </Surface>}
-      {prepared && source && <DenseTrainingPanel key={`${source.fileHash}:${prepared.manifest.problemType}:${prepared.manifest.targetColumn}`} dataset={prepared} source={source} projectId={projectId} userId={userId} onPersisted={() => setRecentRefresh((value) => value + 1)} />}
-      <RecentTrainingRuns projectId={projectId} refresh={recentRefresh} />
+      <Tabs label="Secciones del módulo Feedforward" idPrefix="feedforward" items={FEEDFORWARD_TABS} value={tab}
+        onChange={(next) => setTab(next as FeedforwardTab)} />
+      <div id="feedforward-panel-datos" role="tabpanel" aria-labelledby="feedforward-tab-datos"
+        hidden={tab !== 'datos'} tabIndex={0} className="space-y-6 min-w-0">
+        <Surface className="space-y-5 p-5 sm:p-7">
+          <div className="flex items-center gap-3"><FileSpreadsheet size={21} aria-hidden="true"/><h2 className="text-lg font-semibold">Importación local</h2></div>
+          <p className="text-sm leading-6 text-[var(--muted)]">Límite: {MAX_CSV_BYTES / 1024 / 1024} MiB y {MAX_CSV_ROWS.toLocaleString('es-PE')} filas, lo que se alcance primero. Se requiere cabecera.</p>
+          <label htmlFor="csv-file" className="block text-sm font-medium">Archivo CSV</label>
+          <input id="csv-file" type="file" accept=".csv,text/csv" disabled={busy || trainingBusy} onChange={(event) => void loadFile(event.target.files?.[0])}
+            className="block w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-[var(--surface-muted)] file:px-4 file:py-2 file:text-[var(--ink)]" />
+          {trainingBusy && <Notice>Para cambiar el dataset, espera a que termine el entrenamiento y se confirme su guardado.</Notice>}
+          {busy && <p role="status" className="text-sm text-[var(--muted)]">Validando el CSV local…</p>}
+          {table && <p role="status" className="text-sm">{filename}: <strong>{table.rows.length}</strong> filas y <strong>{table.columns.length}</strong> columnas.</p>}
+        </Surface>
+        {table && <Surface className="space-y-5 p-5 sm:p-7">
+          <h2 className="text-lg font-semibold">Preparación reproducible</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField id="target-column" label="Columna objetivo" value={target} disabled={trainingBusy} options={table.columns.map((column) => ({ value: column, label: column }))}
+              onChange={(event) => { setTarget(event.target.value); setProblemType(analyzeObjective(table, event.target.value).recommended ?? 'binary'); setPrepared(null) }}/>
+            <SelectField id="problem-type" label="Problema" value={problemType} disabled={trainingBusy} options={[{ value: 'binary', label: 'Clasificación binaria' }, { value: 'regression', label: 'Regresión' }]}
+              onChange={(event) => { setProblemType(event.target.value as ProblemType); setPrepared(null) }}/>
+          </div>
+          {targetAnalysis && <Notice>
+            <strong>Análisis de objetivo:</strong> {targetAnalysis.distinctValues} valores distintos. {targetAnalysis.reason}
+            {targetAnalysis.recommended && targetAnalysis.recommended !== problemType && ' La selección actual es técnicamente posible solo cuando sus valores son compatibles, pero puede no representar bien el problema.'}
+          </Notice>}
+          <p className="text-xs text-[var(--muted)]">Partición 70/15/15, semilla 42, estandarización con estadísticas exclusivas de entrenamiento y codificación de categorías.</p>
+          <Button type="button" onClick={prepare} disabled={busy || trainingBusy}>Validar y preparar</Button>
+        </Surface>}
+        {error && <Notice tone="error">{error}</Notice>}
+        {prepared && <Surface className="space-y-4 p-5 sm:p-7">
+          <h2 className="text-lg font-semibold">Datos preparados en memoria</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              ['Entrenamiento', prepared.train.x.length],
+              ['Validación', prepared.validation.x.length],
+              ['Prueba', prepared.test.x.length],
+              ['Características', prepared.manifest.featureNames.length],
+            ].map(([label, value]) => <div key={label} className="rounded-xl bg-[var(--surface-muted)] p-4"><p className="text-xs text-[var(--muted)]">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>)}
+          </div>
+          <Notice>Partición y transformaciones calculadas localmente. El CSV no se envía a Supabase.</Notice>
+          <Button type="button" onClick={() => setTab('arquitectura')}>Continuar a Arquitectura</Button>
+        </Surface>}
+      </div>
+      {/* Mantener montado el motor al cambiar de pestaña: evita perder el Worker y el modelo. */}
+      {prepared && source && <DenseTrainingPanel
+        key={`${source.fileHash}:${prepared.manifest.problemType}:${prepared.manifest.targetColumn}`}
+        activeTab={tab} onBusyChange={setTrainingBusy}
+        dataset={prepared} source={source} projectId={projectId} userId={userId}
+        onPersisted={() => setRecentRefresh((value) => value + 1)} />}
+      {!prepared && tab !== 'datos' && <div id={`feedforward-panel-${tab}`} role="tabpanel"
+        aria-labelledby={`feedforward-tab-${tab}`} tabIndex={0}>
+        <Surface className="space-y-4 p-5 sm:p-7">
+          <h2 className="text-lg font-semibold">Prepara tus datos para continuar</h2>
+          <Notice>Primero importa y prepara un CSV en Datos. Se requiere un proyecto activo y rol Ingeniero.</Notice>
+          <Button type="button" variant="outline" onClick={() => setTab('datos')}>Ir a Datos</Button>
+        </Surface>
+      </div>}
+      {tab === 'evaluar' && <RecentTrainingRuns projectId={projectId} refresh={recentRefresh} />}
     </div>
   )
 }

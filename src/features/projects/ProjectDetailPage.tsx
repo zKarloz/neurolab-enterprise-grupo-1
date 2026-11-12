@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Layers3, Archive, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, GitBranch, Sparkles, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Layers3, Archive, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, GitBranch, Sparkles, Pencil, Trash2, Users } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
@@ -88,45 +88,46 @@ export function ProjectDetailPage() {
         {canManage && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setEditing(true)}><Pencil size={16} /> Editar</Button><Button variant="outline" onClick={() => setArchiving(true)}><Archive size={16} /> Archivar</Button></div>}
       </div>
       <div className="flex flex-wrap gap-3 text-xs"><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">{project.status === 'active' ? 'Proyecto activo' : 'Proyecto archivado'}</span><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Creado {new Date(project.created_at).toLocaleDateString('es-PE')}</span>{admin && !isResponsible && <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Supervisión administrativa</span>}</div>
-      {isEngineer && project.status === 'active' && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Dataset local</h2><p className="mt-2 text-sm text-[var(--muted)]">Importa y prepara un CSV sin subir sus filas a Supabase.</p><Link to={`/proyectos/${projectId}/datos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileSpreadsheet size={16}/> Abrir preparador CSV</Link></Surface>}
+      {/* Tarjetas de acceso: icono en el título y acción principal solo con texto. */}
+      {isEngineer && project.status === 'active' && <Surface className="p-5 sm:p-7"><div className="flex items-center gap-2"><FileSpreadsheet size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Red feedforward · Dense</h2></div><p className="mt-2 text-sm text-[var(--muted)]">Prepara datos tabulares, configura capas Dense, entrena, evalúa y predice desde pestañas. El CSV permanece local.</p><Link to={`/proyectos/${projectId}/datos`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir Feedforward</Link></Surface>}
       {/* CNN-1 muestra la configuración sólo a los integrantes del proyecto. */}
       {isMember && <Surface className="p-5 sm:p-7">
-        <div className="flex items-center gap-2"><Layers3 size={19} /><h2 className="text-lg font-semibold">Red convolucional · CNN</h2></div>
+        <div className="flex items-center gap-2"><Layers3 size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Red convolucional · CNN</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Explora muestras reales de MNIST y configura visualmente capas Conv2D, pooling y Dense. Entrenamiento en CNN-2.</p>
-        <Link to={`/proyectos/${projectId}/cnn`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><Layers3 size={16}/> Abrir CNN</Link>
+        <Link to={`/proyectos/${projectId}/cnn`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir CNN</Link>
       </Surface>}
       {/* RNN-1: acceso de lectura para integrantes; solo el Ingeniero configura los datos locales. */}
       {isMember && <Surface className="p-5 sm:p-7">
-        <div className="flex items-center gap-2"><GitBranch size={19}/><h2 className="text-lg font-semibold">Red recurrente · RNN</h2></div>
+        <div className="flex items-center gap-2"><GitBranch size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Red recurrente · RNN</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Explora series temporales de un CSV local y diseña capas SimpleRNN o LSTM. Entrenamiento y persistencia se incorporarán en incrementos posteriores.</p>
-        <Link to={`/proyectos/${projectId}/rnn`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><GitBranch size={16}/> Abrir RNN</Link>
+        <Link to={`/proyectos/${projectId}/rnn`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir RNN</Link>
       </Surface>}
       {/* GAN-1: acceso solo con membresía explícita, sin privilegio técnico para Admin global. */}
       {isMember && <Surface className="p-5 sm:p-7">
-        <div className="flex items-center gap-2"><Sparkles size={19}/><h2 className="text-lg font-semibold">Red generativa adversarial · GAN</h2></div>
+        <div className="flex items-center gap-2"><Sparkles size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Red generativa adversarial · GAN</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Explora imágenes reales en CSV local y diseña generador y discriminador. GAN-1 no entrena ni genera imágenes todavía.</p>
-        <Link to={`/proyectos/${projectId}/gan`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><Sparkles size={16}/> Abrir GAN</Link>
+        <Link to={`/proyectos/${projectId}/gan`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir GAN</Link>
       </Surface>}
-      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Evaluación e historial</h2>
+      {isMember && <Surface className="p-5 sm:p-7"><div className="flex items-center gap-2"><ChartNoAxesCombined size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Evaluación e historial</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Consulta las métricas por época y las evaluaciones de prueba confirmadas en Supabase, sin recuperar el CSV.</p>
-        <Link to={`/proyectos/${projectId}/historial`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><ChartNoAxesCombined size={16}/> Abrir historial</Link>
+        <Link to={`/proyectos/${projectId}/historial`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir historial</Link>
       </Surface>}
-      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Modelos privados</h2>
+      {isMember && <Surface className="p-5 sm:p-7"><div className="flex items-center gap-2"><Database size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Modelos privados</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Versiones inmutables de Feedforward, autorizadas por proyecto. Recupera pesos para inferencia sin CSV.</p>
-        <Link to={`/proyectos/${projectId}/modelos`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><Database size={16}/> Abrir registro de modelos</Link>
+        <Link to={`/proyectos/${projectId}/modelos`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir registro de modelos</Link>
       </Surface>}
-      {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Reportes</h2>
+      {isMember && <Surface className="p-5 sm:p-7"><div className="flex items-center gap-2"><FileText size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Reportes</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Ficha, arquitectura y hasta 200 entrenamientos recientes con exportación autorizada CSV/PDF.</p>
-        <Link to={`/proyectos/${projectId}/reportes`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><FileText size={16}/> Abrir reportes</Link>
+        <Link to={`/proyectos/${projectId}/reportes`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir reportes</Link>
       </Surface>}
-      {isResponsible && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Auditoría del proyecto</h2>
+      {isResponsible && <Surface className="p-5 sm:p-7"><div className="flex items-center gap-2"><ClipboardList size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Auditoría del proyecto</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Eventos paginados, filtros y exportación CSV, exclusivos del Responsable.</p>
-        <Link to={`/proyectos/${projectId}/auditoria`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><ClipboardList size={16}/> Ver auditoría</Link>
+        <Link to={`/proyectos/${projectId}/auditoria`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Ver auditoría</Link>
       </Surface>}
       {error && <Notice tone="error">{error} <button className="ml-2 underline" type="button" onClick={() => void reload()}>Reintentar</button></Notice>}
       {notice && <Notice tone="success">{notice}</Notice>}
       <Surface className="p-5 sm:p-7">
-        <header className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><Users size={19} /><h2 className="text-lg font-semibold">Integrantes</h2></div><p className="mt-2 text-xs text-[var(--muted)]">Permisos por proyecto, independientes del Administrador global.</p></div>{canManage && <Button onClick={() => { setEmail(''); setRole('reader'); setAdding(true) }}><Plus size={16}/> Agregar integrante</Button>}</header>
+        <header className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><Users size={19} /><h2 className="text-lg font-semibold">Integrantes</h2></div><p className="mt-2 text-xs text-[var(--muted)]">Permisos por proyecto, independientes del Administrador global.</p></div>{canManage && <Button onClick={() => { setEmail(''); setRole('reader'); setAdding(true) }}>Agregar integrante</Button>}</header>
         <div className="mt-6 overflow-x-auto">
           <table className="w-full min-w-[680px] border-collapse text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="px-3 py-4 font-medium">Usuario</th><th className="px-3 py-4 font-medium">Rol de proyecto</th><th className="px-3 py-4 font-medium">Permisos</th><th className="px-3 py-4 text-right font-medium">Acciones</th></tr></thead>
             <tbody>{pageMembers.map((member) => {

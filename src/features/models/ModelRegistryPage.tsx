@@ -7,6 +7,7 @@ import { Pagination } from '../../components/ui/Pagination'
 import { SelectField } from '../../components/ui/SelectField'
 import type { FamilyFilter } from '../../ml/evaluation/families.ts'
 import { Surface } from '../../components/ui/Surface'
+import { Tabs } from '../../components/ui/Tabs'
 import { useAuth } from '../auth/AuthProvider'
 import { SessionPredictionCard } from '../evaluation/SessionPredictionCard'
 import { supabase } from '../../lib/supabase'
@@ -23,6 +24,11 @@ import { CnnRestoredPredictionCard } from './CnnRestoredPredictionCard'
 import { ModelReviewsSection } from './ModelReviewsSection'
 
 const PAGE_SIZE = 8
+type RegistryTab = 'published' | 'reviews'
+const REGISTRY_TABS = [
+  { id: 'published', label: 'Versiones publicadas' },
+  { id: 'reviews', label: 'Revisión y aprobación' },
+] as const
 type RegistryFamilyFilter = FamilyFilter | 'gan'
 
 type LoadedPredictor = Awaited<ReturnType<typeof loadDensePredictor>> | Awaited<ReturnType<typeof loadCnnPredictor>> | Awaited<ReturnType<typeof loadRnnPredictor>> | Awaited<ReturnType<typeof loadGanGenerator>>
@@ -37,6 +43,7 @@ export function ModelRegistryPage() {
   const [models, setModels] = useState<RegisteredModel[]>([])
   const [versions, setVersions] = useState<RegisteredVersion[]>([])
   const [page, setPage] = useState(1)
+  const [tab, setTab] = useState<RegistryTab>('published')
   const [family, setFamily] = useState<RegistryFamilyFilter>('all')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -75,6 +82,18 @@ export function ModelRegistryPage() {
 
   useEffect(() => () => { loadGeneration.current += 1; predictor.current?.dispose(); predictor.current = null }, [])
 
+  /** Al salir de Versiones, liberar pesos y descartar descargas aún pendientes. */
+  function changeTab(next: string) {
+    if (next !== 'published' && next !== 'reviews' || next === tab) return
+    loadGeneration.current += 1
+    predictor.current?.dispose()
+    predictor.current = null
+    setSelected(null)
+    setBusy(false)
+    setError('')
+    setTab(next)
+  }
+
   async function loadVersion(version: RegisteredVersion) {
     const generation = ++loadGeneration.current
     setBusy(true)
@@ -84,6 +103,7 @@ export function ModelRegistryPage() {
     predictor.current = null
     try {
       const bundle = await downloadModelVersion(version)
+      if (generation !== loadGeneration.current) return
       const restored = isGanManifest(version.preprocessing_manifest)
         ? await loadGanGenerator(bundle, version.preprocessing_manifest)
         : isRnnManifest(version.preprocessing_manifest)
@@ -107,6 +127,12 @@ export function ModelRegistryPage() {
       <h1 className="text-3xl font-semibold">Modelos privados</h1>
       <p className="text-sm text-[var(--muted)]">{projectName} · Versiones inmutables, descargadas desde Storage privado bajo RLS.</p>
     </header>
+    <Tabs label="Secciones de modelos privados" idPrefix="model-registry"
+      items={REGISTRY_TABS} value={tab} onChange={changeTab} />
+    <div id={`model-registry-panel-${tab}`} role="tabpanel"
+      aria-labelledby={`model-registry-tab-${tab}`} tabIndex={0}
+      className="min-w-0 space-y-6 focus-visible:outline-2 focus-visible:outline-[var(--focus)]">
+    {tab === 'published' ? <>
     <Surface className="space-y-4 p-5 sm:p-7">
       <div className="flex items-center gap-2"><Database size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Versiones publicadas</h2></div>
       <p className="text-sm text-[var(--muted)]">Los Ingenieros publican versiones desde el entrenamiento finalizado. Los miembros autorizados pueden recuperarlas para predecir sin el CSV.</p>
@@ -129,7 +155,6 @@ export function ModelRegistryPage() {
       {busy && <p role="status">Descargando y verificando el modelo…</p>}
       {error && <Notice tone="error">{error}</Notice>}
     </Surface>
-    <ModelReviewsSection projectId={projectId} models={models} versions={versions} />
     {selected && <div className="space-y-4">
       <Notice tone="success"><ShieldCheck size={16} className="inline"/> Versión v{selected.version} cargada con integridad SHA-256 verificada. Los datos de entrada de predicción siguen siendo locales.</Notice>
       {isGanManifest(selected.preprocessing_manifest) ? <GanRestoredGenerationCard key={selected.id}
@@ -161,5 +186,7 @@ export function ModelRegistryPage() {
             return loaded.predict(values)
           }}/>} 
     </div>}
+    </> : <ModelReviewsSection projectId={projectId} models={models} versions={versions} />}
+    </div>
   </div>
 }
