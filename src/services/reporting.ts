@@ -5,7 +5,7 @@ export type ProjectReportSnapshot = {
   totals: { architectures: number; datasets: number; runs: number; versions: number }
   architectures: Array<{ id: string; name: string; version: number; config_json: Record<string, unknown>; created_at: string }>
   datasets: Array<{ id: string; name: string; version: number; target_column: string; problem_type: string; row_count: number; created_at: string }>
-  runs: Array<{ id: string; architecture_id: string; dataset_id: string; problem_type: string; status: string; epochs_planned: number; completed_epochs: number; backend: string | null; created_at: string }>
+  runs: Array<{ family: string; id: string; architecture_id: string; dataset_id: string; problem_type: string; status: string; epochs_planned: number; completed_epochs: number; backend: string | null; created_at: string }>
   evaluations: Array<{ run_id: string; metrics_json: Record<string, unknown> }>
   versions: Array<{ id: string; model_id: string; version: number; created_at: string }>
 }
@@ -72,7 +72,7 @@ export async function loadProjectReport(projectId: string, userId: string): Prom
       .eq('project_id', projectId).order('created_at', { ascending: false }).limit(EXPORT_LIMIT),
     client().from('datasets').select('id,name,version,target_column,problem_type,row_count,created_at', { count: 'exact' })
       .eq('project_id', projectId).order('created_at', { ascending: false }).limit(EXPORT_LIMIT),
-    client().from('training_runs').select('id,architecture_id,dataset_id,problem_type,status,epochs_planned,completed_epochs,backend,created_at', { count: 'exact' })
+    client().from('training_runs').select('id,architecture_id,dataset_id,problem_type,status,epochs_planned,completed_epochs,backend,created_at,architectures!inner(family)', { count: 'exact' })
       .eq('project_id', projectId).order('created_at', { ascending: false }).limit(EXPORT_LIMIT),
     client().from('run_evaluations').select('run_id,metrics_json')
       .eq('project_id', projectId).order('evaluated_at', { ascending: false }).limit(EXPORT_LIMIT),
@@ -91,7 +91,10 @@ export async function loadProjectReport(projectId: string, userId: string): Prom
     },
     architectures: (architectures.data ?? []) as ProjectReportSnapshot['architectures'],
     datasets: (datasets.data ?? []) as ProjectReportSnapshot['datasets'],
-    runs: (runs.data ?? []) as ProjectReportSnapshot['runs'],
+    // Evita inferir familia desde problem_type: RNN también tiene regresión/binaria/multiclase.
+    runs: ((runs.data ?? []) as unknown as Array<Omit<ProjectReportSnapshot['runs'][number], 'family'> & {
+      architectures: { family: string } | null
+    }>).map(({ architectures: architecture, ...run }) => ({ ...run, family: architecture?.family ?? 'desconocida' })),
     evaluations: (evaluations.data ?? []) as ProjectReportSnapshot['evaluations'],
     versions: (versions.data ?? []) as ProjectReportSnapshot['versions'],
   }

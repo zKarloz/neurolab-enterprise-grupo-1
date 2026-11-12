@@ -99,10 +99,11 @@ export async function finalizeRun(
 export async function listRecentRuns(projectId: string): Promise<RecentRun[]> {
   const { data, error } = await client()
     .from('training_runs')
-    .select('id,status,completed_epochs,epochs_planned,backend,created_at,ended_at')
+    .select('id,status,completed_epochs,epochs_planned,backend,created_at,ended_at,architectures!inner(family)')
     .eq('project_id', projectId)
     // El panel Feedforward no debe mezclar por ahora ejecuciones CNN multiclase.
     .in('problem_type', ['binary', 'regression'])
+    .eq('architectures.family', 'feedforward')
     .order('created_at', { ascending: false })
     .limit(8)
   if (error) throw new Error(`No se pudieron recuperar las ejecuciones: ${error.message}`)

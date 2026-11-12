@@ -314,3 +314,196 @@ La prueba verificará que miembros pueden leer tablas y `model.json`, Admin sin 
 
 **Criterio formal de cierre CNN:** todas las pruebas locales obligatorias, diagnóstico SQL, prueba RLS de cinco cuentas, validaciones funcionales/manuales y Vercel para el commit publicado deben pasar. Una prueba omitida o no ejecutada mantiene la familia CNN en **VALIDACIÓN PENDIENTE**. RNN y GAN serán incrementos posteriores, no alcanzados por este cierre.
 <!-- CNN5_CIERRE_FIN -->
+
+<!-- RNN1_INICIO -->
+## RNN-1 — Datos y arquitectura secuencial
+
+**Estado:** preparado para validación local y Vercel, no constituye entrenamiento.
+
+- Ruta privada `/proyectos/:projectId/rnn` con control de membresía: el Admin global no es un integrante implícito.
+- Solo Ingeniero de proyecto activo importa CSV y modifica el diseñador; los demás miembros consultan.
+- Archivo CSV local con cabeceras: hasta 10 MiB / 50 000 filas, PapaParse compartido.
+- Selección de serie, tiempo numérico, objetivo y 1–16 variables numéricas; problemas regresión, binaria y multiclase (3–10).
+- Ventanas de 4/8/16/32 pasos; ninguna ventana mezcla series; máximo 20 000 ventanas.
+- Para la ventana t..t+L-1, el objetivo se toma de t+L. Se ordena por tiempo y se rechazan duplicados y no finitos.
+- Tres ventanas reales de ejemplo; no se cargan ni persisten CSV, métricas o pesos en Supabase.
+- Diseñador SimpleRNN/LSTM, 1–2 capas con 8/16/32/64 unidades, Dense opcional y salida según problema.
+- Shapes/parámetros teóricos calculados en el cliente. Entrenar/Evaluar/Predecir son vistas futuras sin métricas ficticias.
+
+### Prueba y límites
+
+- Muestra local: `tests/fixtures/rnn1_temporal_demo.csv` (serie, paso, variables, objetivo).
+- Ejecutar `node --experimental-strip-types --test tests/rnn1.*.test.mjs`, `npm run typecheck`, `npm run build`.
+- En la muestra, 4 pasos forman 12 ventanas; 8 pasos, 4 ventanas. Probar permisos, temas y móvil.
+- No se requiere migración SQL, nuevas dependencias ni funciones RPC en RNN-1.
+- RNN-2 debe evitar fuga por ventanas solapadas mediante partición cronológica con separación temporal o por serie,
+  ajustar escaladores solo con train y entrenar con TF.js real y cancelación.
+- Antes de RNN-4, filtrar historial y modelos por `architectures.family`, nunca inferir familia a partir del tipo de problema.
+- No afirmar cierre hasta aprobar validación en VSCode y la versión publicada en Vercel.
+<!-- RNN1_FIN -->
+
+<!-- RNN2_TRAINING_BEGIN -->
+## RNN-2 — Entrenamiento real de secuencias
+
+**Estado:** implementación preparada para validación en VSCode y navegador. No equivale a un despliegue realizado.
+
+- Se entrena con TensorFlow.js `SimpleRNN` o `LSTM`, 1–2 capas recurrentes y Dense opcional del diseñador RNN-1; el motor verifica el conteo de parámetros respecto del diagrama.
+- CSV local de RNN-1: máximo 2 000 ventanas posibles para entrenamiento. Cada serie requiere longitud suficiente. La división asigna objetivos de modo cronológico, ~70/15/15 y **purga `steps` ventanas** entre train, validación y test para que no se compartan observaciones originales. Si la serie es demasiado corta no se entrena.
+- Transformaciones de predictores y objetivo de regresión calculadas **solo con train**. Para regresión se muestran MSE y MAE sobre el objetivo estandarizado; clasificación usa entropía cruzada y accuracy. Métricas auténticas de `model.fit()` por época, barras de progreso y backend/contexto reportados por el motor.
+- Worker Vite CPU, con fallback al hilo principal **solo si el Worker falla antes del primer evento**. Cancelación cooperativa confirmada por el motor; sin reintentos de trabajos parciales. Liberación de tensores y modelo al finalizar, cancelar o abandonar la pantalla.
+- Solo el **Ingeniero** miembro de proyecto activo puede iniciar entrenamiento. Cambiar de pestaña dentro de RNN no desmonta la sesión. No se envían datos ni modelos a Supabase; sin migraciones SQL ni dependencias nuevas.
+- Hiperparámetros: épocas 2/5/10, batch 8/16/32, learning rate 0.001/0.0005. El test está reservado para RNN-3 (no participa en fit ni validación); predicción, evaluación final y persistencia todavía no disponibles.
+- Datos: `tests/fixtures/rnn2_temporal_demo.csv` contiene **señales sintéticas de prueba** de 2 series y 128 filas, con 4 pasos → 72 train, 14 validación, 18 test y 16 ventanas purgadas. No es una medida de generalización. El archivo `rnn1_temporal_demo.csv` de 20 filas solo sirve para visualización y es demasiado corto para el entrenamiento purgado de RNN-2.
+
+**Verificación (VSCode + Git Bash)**:
+
+```bash
+node --experimental-strip-types --test tests/rnn1.*.test.mjs tests/rnn2.training-data.test.mjs tests/rnn2.contract.test.mjs
+node --experimental-strip-types --test tests/rnn2.runtime.test.mjs
+npm run typecheck
+npm run build
+npm run dev
+```
+
+Pruebas de navegador con Ingeniero: entrenar SimpleRNN y LSTM 2 épocas usando el CSV RNN-2; comprobar cuatro métricas reales y cancelación. Probar al menos una cuenta no Ingeniero, cambiar pestaña, tema claro/oscuro, pantalla móvil y pérdida de sesión. Documentar backend/tiempos sin inventar valores.
+<!-- RNN2_TRAINING_END -->
+
+<!-- RNN3_EVALUACION_INFERENCIA_BEGIN -->
+## RNN-3 — Evaluación de test y predicción temporal local
+
+**Estado:** implementación preparada, pendiente de validación de runtime, TypeScript, build y pruebas de navegador por el equipo.
+
+- Mantiene SimpleRNN/LSTM y partición temporal causal de RNN-2. Solo **después** de completar `model.fit()` se calculan predicciones sobre el test reservado; las ventanas de test no participan en el entrenamiento ni en la validación y no ajustan transformadores.
+- Regresión: MSE, RMSE, MAE y R² calculados en la **escala original** del objetivo mediante los estadísticos ajustados solo en train. R² se muestra como no definido cuando el objetivo test es constante.
+- Clasificación binaria/multiclase: accuracy, precisión/recall/F1 macro, matriz de confusión (filas reales, columnas predichas) y hasta 8 ejemplos de test. Las clases proceden de train; no se inventan valores ni se ocultan clases con cero casos.
+- El modelo entrenado permanece en memoria del Web Worker (o fallback principal) para inferir a partir de la **última ventana cronológica real** de una serie del CSV local. Solo se utilizan las columnas predictoras; no se utiliza el objetivo al construir esta ventana. Se devuelve la salida desnormalizada o clase y probabilidades.
+- La predicción estima la observación posterior a la ventana; no se extrapola ni inventa una marca temporal exacta. No se permite cargar CSV externos con otro esquema todavía.
+- Se liberan modelos y tensores cuando se abandona el módulo, cambia proyecto o identidad, cambia arquitectura/CSV o comienza un nuevo entrenamiento. La cancelación no deja modelo para inferencia. Las métricas y predicciones son temporales y **no se guardan en Supabase**.
+- El motor conserva un solo entrenamiento por sesión; el Worker no se reinicia tras fallos ocurridos después del inicio. No se introducen nuevas tablas, SQL, librerías ni dependencias.
+
+**Pruebas (Git Bash):**
+
+```bash
+node --experimental-strip-types --test tests/rnn1.*.test.mjs tests/rnn2.training-data.test.mjs tests/rnn2.contract.test.mjs tests/rnn3.evaluation.test.mjs tests/rnn3.inference.test.mjs tests/rnn3.contract.test.mjs
+node --experimental-strip-types --test tests/rnn2.runtime.test.mjs tests/rnn3.runtime.test.mjs
+npm run typecheck
+npm run build
+npm run dev
+```
+
+**Validación funcional:** usar `tests/fixtures/rnn2_temporal_demo.csv` (4 pasos) y entrenar 2 épocas; abrir Evaluar, verificar 18 observaciones de test y métricas finitas. Abrir Predecir, seleccionar `sensor_A` y `sensor_B`, verificar inferencia de ambas; repetir con SimpleRNN y LSTM. Cambiar de pestaña durante el entrenamiento, comprobar cancelación y liberación al cambiar CSV. Validar acceso de Ingeniero frente a los demás roles, temas claro/oscuro y móvil.
+
+**Limitación:** la calidad predictiva depende del dataset, el horizonte y el entrenamiento; la pérdida de validación observada puede ser muy superior a la pérdida de train. RNN-4 agregará persistencia, modelos versionados e historial, con RLS/RPC específicos.
+<!-- RNN3_EVALUACION_INFERENCIA_END -->
+
+## RNN-4A — Preparación de persistencia y tabla paginada
+
+- La evaluación sigue calculándose sobre el test completo; ahora la tabla muestra todos los ejemplos, ocho por página, reutilizando `Pagination`. Se mantienen únicamente en memoria local y no se guardan por fila.
+- Migración `202611100014_rnn_temporal.sql`: añade familia `rnn` a `architectures` y RPC `create_rnn_training_run`, `record_rnn_training_epoch`, `record_rnn_test_evaluation`. Continúa el RLS del proyecto, solo se permite rol Ingeniero activo para escribir.
+- Los metadatos del CSV se limitan a nombres de columnas, conteos, huella SHA-256 y normalizadores agregados obtenidos exclusivamente de entrenamiento. No se persisten series, ventanas ni objetivos individuales.
+- Las operaciones RNN no se conectan aún en la UI durante RNN-4A: no se crean ejecuciones remotas hasta instalar RNN-4B. No hay que repetir migraciones previas.
+- **Advertencia de diseño:** RNN admite regresión, binaria y multiclase; por tanto, el historial, reportes y versiones de modelos deberán identificar su familia desde `architectures.family` o `preprocessing_manifest.family`, nunca deducirla solo de `problem_type`. Se corregirá antes de habilitar la escritura de RNN en RNN-4B.
+- Pruebas: `node --experimental-strip-types --test tests/rnn4a.*.test.mjs`. Validar `npm run typecheck`, `npm run build`, tabla 18 resultados (8+8+2) y diagnóstico de Supabase de solo lectura.
+
+## RNN-4B — Persistencia de entrenamiento y evaluación
+
+- **Alcance:** conserva SimpleRNN/LSTM y evaluación en TensorFlow.js local. Antes de iniciar un entrenamiento, calcula SHA-256 del CSV completo, prepara un resumen causal basado en train y crea una ejecución RNN mediante `create_rnn_training_run`. El servidor confirma runId; solo entonces arranca el Worker.
+- **Escrituras ordenadas:** `set_training_runtime` → por época `record_rnn_training_epoch` → una única `record_rnn_test_evaluation` → `finish_training_run` (completada, fallida, cancelada o interrumpida). Se muestran por separado el progreso **local** y las confirmaciones **remotas**; no se presenta éxito de persistencia sin respuesta positiva.
+- **Privacidad:** se transmiten nombres/contajes de columnas y series, opciones, huella SHA-256, parámetros de normalización aprendidos únicamente en train, métricas por época y test agregado. CSV, ventanas, identificadores de serie, tiempo individual, real/predicho, tensores y pesos siguen **en el navegador**.
+- **Seguridad:** RPC de RNN-4A (migración 014) y funciones compartidas F3 con RLS/permiso de Ingeniero en proyecto activo. RNN-4B **no incorpora migraciones nuevas**. Un fallo remoto no se transforma en éxito local; la cola intenta cerrar la ejecución como fallida y avisa si no pudo confirmarlo. El cálculo local no prueba de forma independiente la veracidad del entrenamiento.
+- **Compatibilidad:** Feedforward/CNN no deben clasificar RNN basándose solo en `problem_type`. El historial Feedforward/CNN excluye temporalmente ejecuciones RNN mediante `architectures.family`; el reporte utiliza la familia real de la arquitectura. La incorporación de métricas RNN al historial dedicado queda para RNN-4D. RNN-4C incorporará publicación de modelos versionados.
+- **Verificación:** `node --experimental-strip-types --test tests/rnn4b.queue.test.mjs tests/rnn4b.contract.test.mjs`; en equipo con dependencias `tests/rnn4b.runtime.test.mjs`, `npm run typecheck`, `npm run build`. Entrenar con `tests/fixtures/rnn2_temporal_demo.csv`, cuatro pasos, dos épocas: 72/14/18, ejecución completada, ocho métricas (4 por época), una evaluación agregada de 18 ventanas. Ejecutar `supabase/tests/FASE_7_RNN4B_VERIFICACION.sql` en SQL Editor (solo lectura).
+- **Limitación operativa:** cerrar pestaña o cambiar de cuenta durante una escritura RPC no garantiza completar el cierre en servidor. Si queda `created`/`running`, usar el diagnóstico para identificarlo y no interpretarlo como completado.
+
+## RNN-4C — Versiones privadas y predicción restaurada
+
+- **Publicación:** tras confirmar las épocas, test agregado y cierre remoto `completed`, el Ingeniero serializa SimpleRNN/LSTM localmente (Worker o fallback) y utiliza `saveModelVersion` de Fase 5. Reserva una versión inmutable, sube `model.json` y `weights.bin` al bucket privado y verifica hashes SHA-256. No se requieren nuevas migraciones; reutiliza RPC F5 y el manifiesto RNN de 014/015.
+- **Restauración:** el registro de modelos filtra Feedforward, CNN y RNN. Descarga con JWT/RLS, comprueba hashes, valida manifiesto/dimensiones y carga los pesos en TensorFlow.js del navegador.
+- **Inferencia sin CSV:** se introducen manualmente `steps` filas, de más antigua a más reciente, con columnas en el orden `features` guardado. Se aplican medias/escalas calculadas solo en train y se revierte la escala del objetivo regresivo; en clasificación se muestran clase y probabilidades. Observaciones y predicciones no se envían a Supabase.
+- **Seguridad:** publica solamente el Ingeniero de proyecto activo desde su ejecución completada; miembros autorizados pueden descargar y predecir. El Administrador global sin membresía no recibe acceso técnico automáticamente. Hashes declarados por el cliente confirman integridad de descarga, no autenticidad criptográfica del entrenamiento.
+- **Vida útil:** el modelo se libera al salir de la vista o cambiar de versión. Un fallo de subida/publicación no se presenta como éxito. Una reserva remota puede quedar sin publicar si una subida falla; no se sobrescriben versiones anteriores.
+- **Pruebas:** `node --experimental-strip-types --test tests/rnn4c.manifest.test.mjs tests/rnn4c.contract.test.mjs`; en Node con TF.js instalado `node --experimental-strip-types --test tests/rnn4c.runtime.test.mjs`; `npm run typecheck && npm run build`. Publicar una RNN y, tras recargar/volver a iniciar sesión, predecir sin CSV. Verificar `supabase/tests/FASE_7_RNN4C_VERIFICACION.sql` después de publicar.
+- **Pendiente:** RNN-4D integrará historial/comparación y RNN-5 validará seguridad/despliegue de cierre.
+
+## RNN-4D — Historial, comparaciones y reportes unificados
+
+- **Historial por familia real:** consulta RLS de `training_runs` y `architectures!inner(family)` con filtro `all/feedforward/cnn/rnn` aplicado en PostgreSQL antes de paginar (8 ejecuciones por página). RNN de regresión/binaria/multiclase no se etiqueta ni mezcla con Feedforward/CNN por compartir `problem_type`.
+- **Detalle histórico RNN:** las curvas reconstruyen las métricas reales de `training_metrics` (loss + MAE/accuracy de train/validation); la tarjeta RNN lee el resumen agregado `run_evaluations.metrics_json` guardado en RNN-4B y presenta MAE/RMSE/MSE/R² o accuracy/macro-métricas/matriz. Nunca recupera ventanas, series ni predicciones individuales. La tabla paginada de 8+8+2 continúa solo en la sesión RNN local.
+- **Comparación:** únicamente entre la misma familia y tipo de problema, con ejecuciones completadas. Para CNN/RNN de clasificación también coinciden las clases y su orden; si no, no se muestran métricas engañosas. La comparación descriptiva no verifica igualdad de dataset, objetivo, horizonte, partición, semillas ni condiciones de entrenamiento; el usuario debe comprobarlas antes de interpretar resultados.
+- **Reportes CSV/PDF:** filtros compartidos de Feedforward/CNN/RNN, familia obtenida desde la FK real, métricas multiclase RNN y binarias con F1 macro, regresión RNN con RMSE/MAE/R². El CSV contiene exclusivamente agregados y metadatos, no muestras. Totales globales sin filtrar. Límite vigente: 200 ejecuciones recientes por instantánea; un filtro no implica exhaustividad histórica.
+- **Compatibilidad y seguridad:** no se alteran las RPC, RLS, bucket privado ni manifiestos/modelos ya publicados en 011–015; no hay nuevas migraciones. Continúan accesos de miembros mediante RLS y se conserva Feedforward/CNN.
+- **Pruebas:** `node --experimental-strip-types --test tests/rnn4d.history.test.mjs tests/rnn4d.contract.test.mjs`; `npm run typecheck && npm run build`; `supabase/tests/FASE_7_RNN4D_VERIFICACION.sql` (solo lectura). Probar filtros en Historial y Reportes, comparación entre dos RNN compatibles, Exportar CSV/PDF, versiones privadas RNN y regresión Feedforward/CNN.
+- **Pendiente:** RNN-5 validará roles/RLS reales, regresiones, despliegue Vercel y cierre formal RNN, independiente de pendientes operativos de Fase 6.
+
+<!-- RNN5_CIERRE_INICIO -->
+## RNN-5 — Seguridad, regresión y cierre de la familia recurrente
+
+**Estado:** PREPARADA PARA VALIDACIÓN. El cierre formal requiere resultados reales de RLS,
+Storage, ejecución y Vercel; las pruebas de código no sustituyen la aceptación.
+RNN-4B: el desarrollador verificó una ejecución completada 2/2, 8 métricas, 1 evaluación y
+18 ventanas de test reservadas/evaluadas. RNN-4C: versión privada con manifiesto temporal,
+hashes/rutas y ejecución completada. RNN-4D: historial y reportes integrados.
+
+### Alcance de RNN-5
+
+- Sin cambios en React, TensorFlow.js, políticas RLS, bucket, tablas, RPC, dependencias o migraciones 011–015.
+- Pruebas de cola de persistencia: orden de runtime/épocas/evaluación/finalización, errores,
+  cancelación y confirmaciones reales; métricas no finitas rechazadas.
+- Pruebas de privacidad: el test completo de 18 ventanas sigue en la tabla paginada **local**;
+  el historial y CSV/PDF almacenan solamente métricas agregadas; no se recuperan ni se exportan
+  las 18 filas originales desde Supabase.
+- Auditoría SQL de **solo lectura**, una fila de resultados:
+  `supabase/tests/FASE_7_RNN5_AUDITORIA_READONLY.sql`. Verifica ocho tablas con RLS,
+  tres RPC seguras, bucket privado, ejecuciones completas, versiones con hashes/rutas y
+  resúmenes sin datos individuales. SQL Editor NO prueba el aislamiento por usuario.
+- Auditoría auténtica con **cinco JWT de prueba**, solo lectura:
+  `scripts/test-rnn5-live.mjs`. Valida Responsable, Ingeniero, Revisor, Lector y
+  Administrador global **sin membresía técnica**; lectura RLS de las siete entidades,
+  acceso privado a model.json/weights.bin y SHA-256 de ambos artefactos. No prueba
+  autorización de escritura ni reemplaza las verificaciones manuales de rol.
+
+### Comandos de validación
+
+```bash
+node --experimental-strip-types --test tests/rnn5.*.test.mjs
+node --experimental-strip-types --test tests/rnn2.runtime.test.mjs tests/rnn4c.runtime.test.mjs
+npm run typecheck
+npm run build
+# Archivo .env.test.local local, fuera de Git; cinco usuarios de pruebas.
+node --env-file=.env.test.local scripts/test-rnn5-live.mjs
+```
+
+Configuración mínima del ensayo real: `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_PUBLISHABLE_KEY`, las cinco cuentas de `TEST_F6_*`, y
+`TEST_RNN5_PROJECT_ID` (alternativa `TEST_F6_PROJECT_ID`). Opcional
+`TEST_RNN5_VERSION_ID` para seleccionar la versión RNN publicada explícitamente.
+Nunca compartir contraseñas ni tokens. Ejecutar solo sobre un proyecto donde estén las
+cuatro membresías y el Admin global esté fuera; el script se detiene si no se cumplen.
+
+### Validaciones funcionales y cierre pendiente
+
+- [ ] Ingeniero: SimpleRNN y LSTM entrenan realmente, muestran métricas y test; cancelación
+      y pérdida de conexión no anuncian finalización remota falsa.
+- [ ] Predicción en sesión; test paginado (8 + 8 + 2 para el CSV demo); cambiar dataset o
+      arquitectura invalida el modelo antiguo.
+- [ ] Versión privada publicada; recuperar tras recargar sin CSV, con ventanas manuales,
+      normalización guardada y control de dimensiones; comprobar hashes y rutas.
+- [ ] Historial/compare/reportes: filtrar Feedforward/CNN/RNN, no mezclar familias/tareas,
+      revisar reportes CSV/PDF solo agregados, totales globales y límites de paginación.
+- [ ] Responsable, Ingeniero, Revisor, Lector, Admin global sin membresía: controles de
+      lectura/acceso y autorización de acciones conforme a los roles; revocación solo en
+      proyecto de prueba, nunca modificar miembros productivos para auditar.
+- [ ] Tema claro por defecto/oscuro en grises, móvil, teclado y estados de carga.
+- [ ] Commit controlado: incluir scripts/tests/SQL/documentación; excluir archivos *.tar.gz,
+      .env.test.local, payloads y parches temporales; Vercel READY para el mismo commit.
+- [ ] Registrar fecha, commit y despliegue, resultados de pruebas, SQL, RLS/Storage real y
+      aceptación en HTTPS, sin datos sensibles.
+
+**Criterio de cierre RNN:** solo marcar CERRADA tras aprobar el runtime TF.js, typecheck/build,
+SQL, las cinco identidades RLS/Storage y las pruebas de navegador en la versión desplegada.
+La verificación de SHA-256 acredita integridad respecto a los hashes declarados por el
+cliente, no autenticidad del entrenamiento. Rendimiento y generalización son experimentales.
+Las tareas operativas pendientes de Fase 6 (Docker/restore Auth/Storage) siguen separadas.
+GAN comienza tras el cierre de RNN, sin atribuirle funcionalidades aún no implementadas.
+<!-- RNN5_CIERRE_FIN -->
+

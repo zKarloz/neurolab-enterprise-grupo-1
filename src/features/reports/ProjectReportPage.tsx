@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
 import { SelectField } from '../../components/ui/SelectField'
-import { familyForReportProblem, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
+import { familyForReportRun, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
 import { Spinner } from '../../components/ui/Spinner'
 import { Surface } from '../../components/ui/Surface'
 import { useAuth } from '../auth/AuthProvider'
@@ -69,7 +69,7 @@ export function ProjectReportPage() {
       } else {
         const rows = filteredRuns.map((run) => {
           const evaluation = evaluationByRun.get(run.id) ?? {}
-          return [run.id, run.created_at, familyForReportProblem(run.problem_type) ?? 'desconocida', run.problem_type, run.status, run.completed_epochs,
+          return [run.id, run.created_at, familyForReportRun(run) ?? 'desconocida', run.problem_type, run.status, run.completed_epochs,
             run.epochs_planned, run.backend ?? '', architecturesById.get(run.architecture_id) ?? '',
             datasetsById.get(run.dataset_id) ?? '', evaluation.loss ?? '', evaluation.accuracy ?? '',
             evaluation.precision ?? '', evaluation.recall ?? '', evaluation.f1 ?? '', evaluation.mse ?? '',
@@ -142,12 +142,12 @@ export function ProjectReportPage() {
     </div>
     <Surface className="space-y-4 p-5 sm:p-7">
       <h2 className="text-lg font-semibold">Historial de entrenamiento</h2>
-      <div className="report-no-print max-w-xs"><SelectField id="report-family" label="Filtrar familias en detalle y exportaciones" value={family} options={[{value:'all',label:'Todas las familias'},{value:'feedforward',label:'Feedforward'},{value:'cnn',label:'CNN'}]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1) }}/></div>
+      <div className="report-no-print max-w-xs"><SelectField id="report-family" label="Filtrar familias en detalle y exportaciones" value={family} options={[{value:'all',label:'Todas las familias'},{value:'feedforward',label:'Feedforward'},{value:'cnn',label:'CNN'},{value:'rnn',label:'RNN'}]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1) }}/></div>
       <p className="text-xs text-[var(--muted)]">Hasta 200 ejecuciones recientes por proyecto. El filtro afecta al detalle y a las exportaciones CSV/PDF; los totales globales no cambian. Si existen más de 200 ejecuciones, este filtro solo cubre la muestra consultada.</p>
       {filteredRuns.length === 0 ? <Notice>No hay ejecuciones para la familia seleccionada en la muestra reciente.</Notice> : <div className="report-table overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="p-3">Fecha</th><th className="p-3">Familia</th><th className="p-3">Arquitectura</th><th className="p-3">Estado</th><th className="p-3">Épocas</th><th className="p-3">Resultado test</th></tr></thead>
         <tbody>{pageRuns.map((run) => {
           const evaluation = evaluationByRun.get(run.id)
-          return <tr key={run.id} className="border-b border-[var(--line)] last:border-0"><td className="p-3 whitespace-nowrap">{new Date(run.created_at).toLocaleString('es-PE')}</td><td className="p-3">{familyForReportProblem(run.problem_type) ? familyLabel(familyForReportProblem(run.problem_type)!) : 'Otra'}</td><td className="p-3">{architecturesById.get(run.architecture_id) ?? 'Arquitectura anterior'}</td><td className="p-3">{statusNames[run.status] ?? run.status}</td><td className="p-3 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td><td className="p-3 tabular-nums">{evaluation ? (run.problem_type === 'multiclass' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'binary' ? `Exactitud ${metric(evaluation.accuracy)}` : `RMSE ${metric(evaluation.rmse)}`) : 'Sin evaluación'}</td></tr>
+          return <tr key={run.id} className="border-b border-[var(--line)] last:border-0"><td className="p-3 whitespace-nowrap">{new Date(run.created_at).toLocaleString('es-PE')}</td><td className="p-3">{familyForReportRun(run) ? familyLabel(familyForReportRun(run)!) : 'Otra'}</td><td className="p-3">{architecturesById.get(run.architecture_id) ?? 'Arquitectura anterior'}</td><td className="p-3">{statusNames[run.status] ?? run.status}</td><td className="p-3 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td><td className="p-3 tabular-nums">{evaluation ? (run.family === 'rnn' && run.problem_type !== 'regression' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'multiclass' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'binary' ? `Exactitud ${metric(evaluation.accuracy)}` : `RMSE ${metric(evaluation.rmse)}`) : 'Sin evaluación'}</td></tr>
         })}</tbody></table></div>}
       <div className="report-no-print"><Pagination page={page} pageSize={PAGE_SIZE} total={filteredRuns.length} onPageChange={setPage}/></div>
     </Surface>

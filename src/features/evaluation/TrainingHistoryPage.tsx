@@ -15,7 +15,9 @@ import { supabase } from '../../lib/supabase'
 import { HISTORY_PAGE_SIZE, listHistoryPage, loadHistoryDetail } from '../../services/evaluationPersistence.ts'
 import type { HistoryRun, HistoryPage, HistoryDetail } from '../../services/evaluationPersistence.ts'
 import { CnnStoredEvaluationCard } from './CnnStoredEvaluationCard.tsx'
-import { compatibleForComparison, familyForProblem, familyLabel, problemLabel, type FamilyFilter } from '../../ml/evaluation/families.ts'
+import { RnnStoredEvaluationCard } from './RnnStoredEvaluationCard.tsx'
+import { isRnnStoredEvaluation } from '../../ml/evaluation/rnnStoredEvaluation.ts'
+import { compatibleHistoryRuns, familyLabel, problemLabel, type FamilyFilter } from '../../ml/evaluation/families.ts'
 
 const LABELS: Record<string, string> = {
   created: 'Creada', preparing: 'Preparando', running: 'Último estado: ejecutándose (puede estar interrumpida)',
@@ -80,7 +82,7 @@ export function TrainingHistoryPage() {
     setDetail(null)
     setDetailLoading(true)
     setDetailError('')
-    void loadHistoryDetail(selected.id, selected.problem_type).then((response) => {
+    void loadHistoryDetail(selected.id, selected.problem_type, selected.family).then((response) => {
       if (current) setDetail(response)
     }).catch((cause: unknown) => {
       if (current) setDetailError(cause instanceof Error ? cause.message : 'No se pudo abrir la ejecución.')
@@ -95,7 +97,7 @@ export function TrainingHistoryPage() {
     setComparisonBusy(true)
     setComparisonError('')
     setComparedDetails(null)
-    void Promise.all(comparison.map((run) => loadHistoryDetail(run.id, run.problem_type)))
+    void Promise.all(comparison.map((run) => loadHistoryDetail(run.id, run.problem_type, run.family)))
       .then((details) => { if (current) setComparedDetails(details as [HistoryDetail, HistoryDetail]) })
       .catch((cause: unknown) => { if (current) setComparisonError(cause instanceof Error ? cause.message : 'No se pudo comparar las ejecuciones.') })
       .finally(() => { if (current) setComparisonBusy(false) })
@@ -106,7 +108,7 @@ export function TrainingHistoryPage() {
     setComparison((previous) => {
       if (previous.some((item) => item.id === run.id)) return previous.filter((item) => item.id !== run.id)
       if (previous.length === 2) return previous
-      if (previous.length === 1 && !compatibleForComparison(previous[0].problem_type, run.problem_type)) return previous
+      if (previous.length === 1 && !compatibleHistoryRuns(previous[0], run)) return previous
       return [...previous, run]
     })
   }
@@ -117,12 +119,12 @@ export function TrainingHistoryPage() {
   return <div className="space-y-6">
     <header>
       <h1 className="text-3xl font-semibold">Historial de entrenamientos</h1>
-      <p className="mt-2 text-sm text-[var(--muted)]">{projectName} · Datos confirmados en Supabase, sin depender del CSV local.</p>
+      <p className="mt-2 text-sm text-[var(--muted)]">{projectName} · Datos confirmados en Supabase, sin depender del CSV local. Feedforward, CNN y RNN con métricas confirmadas y filtros por familia.</p>
     </header>
     <Surface className="space-y-4 p-5 sm:p-7">
       <div className="flex items-center gap-2"><ClipboardList size={20}/><h2 className="text-lg font-semibold">Ejecuciones registradas</h2></div>
-      <p className="text-sm text-[var(--muted)]">Filtra por familia y selecciona dos ejecuciones completadas del mismo tipo de problema. Puedes elegirlas en distintas páginas del mismo filtro.</p>
-      <div className="max-w-xs"><SelectField id="history-family" label="Familia de red" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1); setSelected(null); setComparison([]) }}/></div>
+      <p className="text-sm text-[var(--muted)]">Filtra por familia y selecciona dos ejecuciones completadas de la misma familia y tipo de problema. Puedes elegirlas en distintas páginas del mismo filtro.</p>
+      <div className="max-w-xs"><SelectField id="history-family" label="Familia de red" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }, { value: 'rnn', label: 'RNN' }]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1); setSelected(null); setComparison([]) }}/></div>
       {comparison.length > 0 && <div className="flex flex-wrap items-center gap-2 text-sm" aria-live="polite">
         <span>{comparison.length}/2 seleccionadas</span>
         {comparison.map((run, index) => <span key={run.id} className="rounded-lg border border-[var(--line)] p-2">{index === 0 ? 'A' : 'B'} · {run.id.slice(0, 8)}</span>)}
@@ -138,14 +140,14 @@ export function TrainingHistoryPage() {
           </tr></thead>
           <tbody>{result.items.map((run) => <tr key={run.id} className="border-b border-[var(--line)] last:border-0">
             <td className="p-2">{new Date(run.created_at).toLocaleString('es-PE')}</td>
-            <td className="p-2">{familyLabel(familyForProblem(run.problem_type))}</td><td className="p-2">{problemLabel(run.problem_type)}</td>
+            <td className="p-2">{familyLabel(run.family)}</td><td className="p-2">{problemLabel(run.problem_type)}</td>
             <td className="p-2">{LABELS[run.status] ?? run.status}</td>
             <td className="p-2 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td>
             <td className="p-2">{run.backend?.toUpperCase() ?? '—'}</td>
             <td className="p-2"><Button variant="outline" type="button" onClick={() => setSelected(run)} aria-pressed={selected?.id === run.id}>Ver métricas</Button></td>
             <td className="p-2"><Button variant="outline" type="button" aria-pressed={comparison.some((item) => item.id === run.id)}
               disabled={run.status !== 'completed' || (!comparison.some((item) => item.id === run.id) &&
-                (comparison.length >= 2 || (comparison.length === 1 && !compatibleForComparison(comparison[0].problem_type, run.problem_type))))}
+                (comparison.length >= 2 || (comparison.length === 1 && !compatibleHistoryRuns(comparison[0], run))))}
               onClick={() => toggleCompare(run)}><GitCompareArrows size={15} aria-hidden="true"/>{comparison.some((item) => item.id === run.id) ? 'Quitar' : 'Comparar'}</Button></td>
           </tr>)}</tbody>
         </table>
@@ -162,9 +164,11 @@ export function TrainingHistoryPage() {
       {detailError && <Notice tone="error">{detailError}</Notice>}
       {detail && <>
         {detail.epochs.length ? <TrainingMetricsChart epochs={detail.epochs} problemType={selected.problem_type}/> : <Notice>No hay épocas completas confirmadas para representar.</Notice>}
-        {detail.evaluation ? detail.evaluation.problemType === 'multiclass'
-          ? <CnnStoredEvaluationCard evaluation={detail.evaluation}/>
-          : <TestEvaluationCard evaluation={detail.evaluation} confirmed/> :
+        {detail.evaluation ? isRnnStoredEvaluation(detail.evaluation)
+          ? <RnnStoredEvaluationCard evaluation={detail.evaluation}/>
+          : detail.evaluation.problemType === 'multiclass'
+            ? <CnnStoredEvaluationCard evaluation={detail.evaluation}/>
+            : <TestEvaluationCard evaluation={detail.evaluation} confirmed/> :
           <Notice>No existe evaluación final guardada para esta ejecución. Es normal en entrenamientos de la Fase 3, cancelados o fallidos.</Notice>}
       </>}
     </section>}

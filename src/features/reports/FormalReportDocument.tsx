@@ -1,5 +1,5 @@
 import type { ProjectReportSnapshot } from '../../services/reporting'
-import { familyForReportProblem, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
+import { familyForReportRun, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
 
 interface FormalReportDocumentProps {
   data: ProjectReportSnapshot
@@ -23,8 +23,9 @@ function formatMetric(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : '—'
 }
 
-function testMetrics(metrics: Record<string, unknown> | undefined, problemType: string): string {
+function testMetrics(metrics: Record<string, unknown> | undefined, problemType: string, family: string): string {
   if (!metrics) return 'Sin evaluación'
+  if (family === 'rnn' && problemType !== 'regression') return `Accuracy ${formatMetric(metrics.accuracy)} · F1 macro ${formatMetric(metrics.macroF1)}`
   if (problemType === 'multiclass') return `Accuracy ${formatMetric(metrics.accuracy)} · F1 macro ${formatMetric(metrics.macroF1)}`
   if (problemType === 'binary') {
     return `Exactitud ${formatMetric(metrics.accuracy)} · F1 ${formatMetric(metrics.f1)}`
@@ -114,11 +115,11 @@ export function FormalReportDocument({ data, preparedBy, familyFilter = 'all' }:
             <th>Fecha</th><th>Familia</th><th>Arquitectura / dataset</th><th>Estado</th><th>Épocas</th><th>Métricas test</th>
           </tr></thead><tbody>{detailRuns.map((run) => <tr key={run.id}>
             <td>{formatDate(run.created_at)}</td>
-            <td>{familyForReportProblem(run.problem_type) ? familyLabel(familyForReportProblem(run.problem_type)!) : 'Otra'}</td>
+            <td>{familyForReportRun(run) ? familyLabel(familyForReportRun(run)!) : 'Otra'}</td>
             <td>{architectureNames.get(run.architecture_id) ?? 'Arquitectura no disponible'}<span className="nl-paper-secondary">{datasetNames.get(run.dataset_id) ?? 'Dataset no disponible'}</span></td>
             <td>{STATE_LABELS[run.status] ?? run.status}</td>
             <td>{run.completed_epochs}/{run.epochs_planned}</td>
-            <td>{testMetrics(metricsByRun.get(run.id), run.problem_type)}</td>
+            <td>{testMetrics(metricsByRun.get(run.id), run.problem_type, run.family)}</td>
           </tr>)}</tbody></table>
         )}
       </section>

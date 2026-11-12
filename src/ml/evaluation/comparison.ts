@@ -1,14 +1,36 @@
 import type { TestEvaluation } from './metrics.ts'
 import type { CnnStoredEvaluation } from './cnnStoredEvaluation.ts'
+import { isRnnStoredEvaluation, type RnnStoredEvaluation } from './rnnStoredEvaluation.ts'
 import type { EpochMetrics } from '../training/types.ts'
 
 export interface ComparisonRow { metric: string; first: number | null; second: number | null }
 
 /** Solo se comparan problemas del mismo tipo; nunca se inventan evaluaciones ausentes. */
-export function compareTestMetrics(first: TestEvaluation | CnnStoredEvaluation | null, second: TestEvaluation | CnnStoredEvaluation | null): ComparisonRow[] {
+export function compareTestMetrics(first: TestEvaluation | CnnStoredEvaluation | RnnStoredEvaluation | null, second: TestEvaluation | CnnStoredEvaluation | RnnStoredEvaluation | null): ComparisonRow[] {
   if (!first || !second) return []
   if (first.problemType !== second.problemType) throw new Error('No se pueden comparar métricas de tipos de problema distintos.')
-  if (first.problemType === 'binary' && second.problemType === 'binary') {
+  // Los formatos RNN no son equivalentes a Feedforward/CNN aunque compartan tarea.
+  if (isRnnStoredEvaluation(first) !== isRnnStoredEvaluation(second)) return []
+  if (isRnnStoredEvaluation(first) && isRnnStoredEvaluation(second)) {
+    if (first.problemType === 'regression' && second.problemType === 'regression') return [
+      { metric: 'MSE test', first: first.mse, second: second.mse },
+      { metric: 'RMSE test', first: first.rmse, second: second.rmse },
+      { metric: 'MAE test', first: first.mae, second: second.mae },
+      { metric: 'R² test', first: first.r2, second: second.r2 },
+    ]
+    if (first.problemType !== 'regression' && second.problemType !== 'regression') {
+      // Dos clasificaciones RNN solo se comparan con etiquetas idénticas y mismo orden.
+      if (JSON.stringify(first.classNames) !== JSON.stringify(second.classNames)) return []
+      return [
+        { metric: 'Accuracy test', first: first.accuracy, second: second.accuracy },
+        { metric: 'Precisión macro', first: first.macroPrecision, second: second.macroPrecision },
+        { metric: 'Recall macro', first: first.macroRecall, second: second.macroRecall },
+        { metric: 'F1 macro', first: first.macroF1, second: second.macroF1 },
+      ]
+    }
+    return []
+  }
+  if (!isRnnStoredEvaluation(first) && !isRnnStoredEvaluation(second) && first.problemType === 'binary' && second.problemType === 'binary') {
     return [
       { metric: 'Pérdida test (BCE)', first: first.loss, second: second.loss },
       { metric: 'Exactitud', first: first.accuracy, second: second.accuracy },
@@ -17,7 +39,7 @@ export function compareTestMetrics(first: TestEvaluation | CnnStoredEvaluation |
       { metric: 'F1', first: first.f1, second: second.f1 },
     ]
   }
-  if (first.problemType === 'regression' && second.problemType === 'regression') {
+  if (!isRnnStoredEvaluation(first) && !isRnnStoredEvaluation(second) && first.problemType === 'regression' && second.problemType === 'regression') {
     return [
       { metric: 'MSE test', first: first.mse, second: second.mse },
       { metric: 'RMSE test', first: first.rmse, second: second.rmse },
@@ -25,7 +47,7 @@ export function compareTestMetrics(first: TestEvaluation | CnnStoredEvaluation |
       { metric: 'R² test', first: first.r2, second: second.r2 },
     ]
   }
-  if (first.problemType === 'multiclass' && second.problemType === 'multiclass') {
+  if (!isRnnStoredEvaluation(first) && !isRnnStoredEvaluation(second) && first.problemType === 'multiclass' && second.problemType === 'multiclass') {
     // Las métricas macro son comparables solo si la clase representa el mismo concepto.
     if (JSON.stringify(first.classNames) !== JSON.stringify(second.classNames)) return []
     return [

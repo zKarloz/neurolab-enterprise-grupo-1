@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase'
 import type { ModelArtifactBundle } from '../ml/models/artifacts.ts'
 import { MAX_MODEL_JSON_BYTES, MAX_MODEL_WEIGHTS_BYTES, parseModelJson } from '../ml/models/artifacts.ts'
 import type { CnnPreprocessingManifest } from '../ml/cnn/modelPersistence.ts'
+import type { RnnPreprocessingManifest } from '../ml/rnn/modelPersistence.ts'
 import type { PreparationManifest } from '../ml/preprocessing/types.ts'
 
 export const MODEL_BUCKET = 'model-artifacts'
@@ -22,7 +23,7 @@ export interface RegisteredVersion {
   weights_path: string
   manifest_sha256: string
   weights_sha256: string
-  preprocessing_manifest: PreparationManifest | CnnPreprocessingManifest
+  preprocessing_manifest: PreparationManifest | CnnPreprocessingManifest | RnnPreprocessingManifest
   backend: string
   tfjs_version: string
   created_at: string

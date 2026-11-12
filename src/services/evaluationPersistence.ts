@@ -2,12 +2,14 @@ import { supabase } from '../lib/supabase'
 import type { TestEvaluation } from '../ml/evaluation/metrics.ts'
 import type { EpochMetrics } from '../ml/training/types.ts'
 import { assembleHistoryMetrics } from '../ml/evaluation/history.ts'
-import type { TrainingProblemType, FamilyFilter } from '../ml/evaluation/families.ts'
+import type { TrainingProblemType, TrainingFamily, FamilyFilter } from '../ml/evaluation/families.ts'
 import { parseCnnStoredEvaluation, type CnnStoredEvaluation } from '../ml/evaluation/cnnStoredEvaluation.ts'
+import { parseRnnStoredEvaluation, type RnnStoredEvaluation } from '../ml/evaluation/rnnStoredEvaluation.ts'
 
 export interface HistoryRun {
   id: string
   status: string
+  family: TrainingFamily
   problem_type: TrainingProblemType
   completed_epochs: number
   epochs_planned: number
@@ -17,7 +19,7 @@ export interface HistoryRun {
 }
 export interface HistoryPage { items: HistoryRun[]; total: number }
 export const HISTORY_PAGE_SIZE = 8
-export type StoredEvaluation = TestEvaluation | CnnStoredEvaluation
+export type StoredEvaluation = TestEvaluation | CnnStoredEvaluation | RnnStoredEvaluation
 export type HistoryDetail = { epochs: EpochMetrics[]; evaluation: StoredEvaluation | null }
 
 function client() {
@@ -35,28 +37,40 @@ export async function persistTestEvaluation(runId: string, evaluation: TestEvalu
   if (error) throw new Error(`No se confirmó la evaluación de prueba: ${error.message}`)
 }
 
-/** La paginación se hace en PostgreSQL, sin cargar todos los runs. RLS filtra el resultado. */
+/** Paginación en PostgreSQL con JOIN real: la familia no se infiere de problem_type.
+ * La relación architectures!inner impide etiquetar una RNN como Feedforward.
+ * Los permisos de lectura dependen siempre de las políticas RLS del servidor.
+ */
 export async function listHistoryPage(projectId: string, page: number, family: FamilyFilter = 'all'): Promise<HistoryPage> {
   if (!Number.isInteger(page) || page < 1) throw new Error('Página de historial inválida.')
+  if (!['all', 'feedforward', 'cnn', 'rnn'].includes(family)) throw new Error('Familia de historial inválida.')
   const start = (page - 1) * HISTORY_PAGE_SIZE
-  if (!['all', 'feedforward', 'cnn'].includes(family)) throw new Error('Familia de historial inválida.')
   let query = client().from('training_runs')
-    .select('id,status,problem_type,completed_epochs,epochs_planned,backend,created_at,ended_at', { count: 'exact' })
+    .select('id,status,problem_type,completed_epochs,epochs_planned,backend,created_at,ended_at,architectures!inner(family)', { count: 'exact' })
     .eq('project_id', projectId)
-  // En el alcance aprobado: CNN=multiclass, Feedforward=binary/regression.
-  // Se filtra ANTES de paginar para mantener totales de PostgreSQL exactos.
-  if (family === 'cnn') query = query.eq('problem_type', 'multiclass')
-  else if (family === 'feedforward') query = query.in('problem_type', ['binary', 'regression'])
+    .in('architectures.family', ['feedforward', 'cnn', 'rnn'])
+  // El filtro se ejecuta en DB ANTES de .range; RNN comparte tareas con otras familias.
+  if (family !== 'all') query = query.eq('architectures.family', family)
   const { data, error, count } = await query.order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(start, start + HISTORY_PAGE_SIZE - 1)
   if (error) throw new Error(`No se pudo consultar el historial: ${error.message}`)
-  return { items: (data ?? []) as HistoryRun[], total: count ?? 0 }
+  // PostgREST devuelve un objeto de arquitectura por la FK many-to-one.
+  type JoinedRun = Omit<HistoryRun, 'family'> & { architectures: { family: string } | null }
+  const rows = (data ?? []) as unknown as JoinedRun[]
+  const items = rows.map(({ architectures, ...run }) => {
+    const actualFamily: unknown = architectures?.family
+    if (actualFamily !== 'feedforward' && actualFamily !== 'cnn' && actualFamily !== 'rnn') {
+      throw new Error('Una ejecución no tiene familia de arquitectura reconocida.')
+    }
+    return { ...run, family: actualFamily } as HistoryRun
+  })
+  return { items, total: count ?? 0 }
 }
 
 type MetricRow = { epoch: number; split: string; metric_name: string; metric_value: number }
 
-export async function loadHistoryDetail(runId: string, problemType: TrainingProblemType): Promise<HistoryDetail> {
+export async function loadHistoryDetail(runId: string, problemType: TrainingProblemType, family: TrainingFamily): Promise<HistoryDetail> {
   const [metrics, evaluations] = await Promise.all([
     client().from('training_metrics').select('epoch,split,metric_name,metric_value').eq('run_id', runId)
       .order('epoch', { ascending: true }).limit(250),
@@ -65,9 +79,12 @@ export async function loadHistoryDetail(runId: string, problemType: TrainingProb
   if (metrics.error) throw new Error(`No se pudieron leer las métricas: ${metrics.error.message}`)
   if (evaluations.error) throw new Error(`No se pudo leer la evaluación: ${evaluations.error.message}`)
   const raw: unknown = evaluations.data?.metrics_json
-  const evaluation = problemType === 'multiclass' && raw
-    ? parseCnnStoredEvaluation(raw)
-    : raw && typeof raw === 'object' && 'problemType' in raw && raw.problemType === problemType
+  // La misma tarea puede guardar JSON distintos según familia; no usar solo problem_type.
+  const evaluation = raw === null || raw === undefined ? null
+    : family === 'rnn' ? parseRnnStoredEvaluation(raw)
+    : family === 'cnn' ? parseCnnStoredEvaluation(raw)
+    : typeof raw === 'object' && 'problemType' in raw && raw.problemType === problemType
       ? raw as TestEvaluation : null
+  if (evaluation && evaluation.problemType !== problemType) throw new Error('Evaluación con tipo de problema inconsistente.')
   return { epochs: assembleHistoryMetrics((metrics.data ?? []) as MetricRow[], problemType), evaluation }
 }
