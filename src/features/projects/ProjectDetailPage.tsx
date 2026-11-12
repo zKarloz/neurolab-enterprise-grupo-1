@@ -8,12 +8,21 @@ import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
 import { SelectField } from '../../components/ui/SelectField'
 import { Surface } from '../../components/ui/Surface'
+import { Tabs } from '../../components/ui/Tabs'
 import { useAuth } from '../auth/AuthProvider'
 import { addMember, archiveProject, changeMemberRole, getProject, listMembers, removeMember, updateProject } from '../../services/projects'
 import { projectRoleLabels, projectRoles } from '../../types/projects'
 import type { Project, ProjectMember, ProjectRole } from '../../types/projects'
 import { ProjectForm } from './ProjectForm'
 import { MemberPermissionsModal } from './MemberPermissionsModal'
+import { readProjectModuleExpansion, saveProjectModuleExpansion } from '../../lib/projectModulePreferences'
+import type { ProjectModuleExpansion } from '../../lib/projectModulePreferences'
+
+// Ambas vistas reutilizan la navegación accesible común a CNN, RNN y GAN.
+const PROJECT_DETAIL_TABS = [
+  { id: 'modules', label: 'Módulos disponibles' },
+  { id: 'members', label: 'Integrantes' },
+] as const
 
 const MEMBER_PAGE_SIZE = 10
 const memberRoleOptions = projectRoles.map((value) => ({ value, label: projectRoleLabels[value] }))
@@ -22,6 +31,8 @@ export function ProjectDetailPage() {
   const { projectId = '' } = useParams()
   const navigate = useNavigate()
   const { state } = useAuth()
+  const currentUserId = state.status === 'ready' ? state.user.id : ''
+  const moduleScope = `${currentUserId}:${projectId}`
   const [project, setProject] = useState<Project | null>(null)
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,6 +45,24 @@ export function ProjectDetailPage() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ProjectRole>('reader')
   const [memberPage, setMemberPage] = useState(1)
+  const [tab, setTab] = useState<'modules' | 'members'>('modules')
+  // La elección se conserva por usuario/proyecto en esta sesión de login, no en Supabase.
+  // El scope evita heredar el estado si React reutiliza la página para otro proyecto.
+  const [savedExpansion, setSavedExpansion] = useState(() => ({
+    scope: moduleScope,
+    value: readProjectModuleExpansion(currentUserId, projectId),
+  }))
+  const expansion = savedExpansion.scope === moduleScope
+    ? savedExpansion.value
+    : readProjectModuleExpansion(currentUserId, projectId)
+  const algorithmsOpen = expansion.algorithms
+  const managementOpen = expansion.management
+
+  function toggleModuleSection(section: keyof ProjectModuleExpansion) {
+    const next = { ...expansion, [section]: !expansion[section] }
+    setSavedExpansion({ scope: moduleScope, value: next })
+    saveProjectModuleExpansion(currentUserId, projectId, next)
+  }
   const [memberToRemove, setMemberToRemove] = useState<ProjectMember | null>(null)
   const [memberForPermissions, setMemberForPermissions] = useState<ProjectMember | null>(null)
 
@@ -50,7 +79,6 @@ export function ProjectDetailPage() {
 
   useEffect(() => { void reload() }, [reload])
 
-  const currentUserId = state.status === 'ready' ? state.user.id : ''
   const admin = state.status === 'ready' && state.profile.is_platform_admin
   const isResponsible = members.some((member) => member.user_id === currentUserId && member.role === 'responsible')
   const isEngineer = members.some((member) => member.user_id === currentUserId && member.role === 'engineer')
@@ -88,6 +116,25 @@ export function ProjectDetailPage() {
         {canManage && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setEditing(true)}><Pencil size={16} /> Editar</Button><Button variant="outline" onClick={() => setArchiving(true)}><Archive size={16} /> Archivar</Button></div>}
       </div>
       <div className="flex flex-wrap gap-3 text-xs"><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">{project.status === 'active' ? 'Proyecto activo' : 'Proyecto archivado'}</span><span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Creado {new Date(project.created_at).toLocaleDateString('es-PE')}</span>{admin && !isResponsible && <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2">Supervisión administrativa</span>}</div>
+      <Tabs label="Secciones del proyecto" idPrefix="project-detail"
+        items={PROJECT_DETAIL_TABS} value={tab}
+        onChange={(next) => { if (next === 'modules' || next === 'members') setTab(next) }} />
+      {/* Las tarjetas se montan únicamente en la pestaña Módulos; conservan rutas y permisos. */}
+      {tab === 'modules' && <div id="project-detail-panel-modules" role="tabpanel"
+        aria-labelledby="project-detail-tab-modules" tabIndex={0}
+        className="min-w-0 space-y-5 focus-visible:outline-2 focus-visible:outline-[var(--focus)]">
+      {/* Encabezado sin iconos; React controla la visibilidad de todas las tarjetas. */}
+      <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
+        <h2>
+          <button type="button" aria-expanded={algorithmsOpen} aria-controls="project-modules-algorithms"
+            onClick={() => toggleModuleSection('algorithms')}
+            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl px-5 py-4 text-left text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">
+            <span>Algoritmos</span>
+            <span className="text-sm font-medium text-[var(--muted)]">{algorithmsOpen ? 'Ocultar' : 'Mostrar'}</span>
+          </button>
+        </h2>
+        {algorithmsOpen && <div id="project-modules-algorithms" className="space-y-4 border-t border-[var(--line)] p-4 sm:p-5">
+          {!isMember && <p className="text-sm text-[var(--muted)]">No hay algoritmos disponibles: necesitas ser integrante de este proyecto.</p>}
       {/* Tarjetas de acceso: icono en el título y acción principal solo con texto. */}
       {isEngineer && project.status === 'active' && <Surface className="p-5 sm:p-7"><div className="flex items-center gap-2"><FileSpreadsheet size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Red feedforward · Dense</h2></div><p className="mt-2 text-sm text-[var(--muted)]">Prepara datos tabulares, configura capas Dense, entrena, evalúa y predice desde pestañas. El CSV permanece local.</p><Link to={`/proyectos/${projectId}/datos`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir Feedforward</Link></Surface>}
       {/* CNN-1 muestra la configuración sólo a los integrantes del proyecto. */}
@@ -108,6 +155,20 @@ export function ProjectDetailPage() {
         <p className="mt-2 text-sm text-[var(--muted)]">Explora imágenes reales en CSV local y diseña generador y discriminador. GAN-1 no entrena ni genera imágenes todavía.</p>
         <Link to={`/proyectos/${projectId}/gan`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir GAN</Link>
       </Surface>}
+        </div>}
+      </section>
+      {/* Segunda sección independiente y cerrada inicialmente, sin iconos en su encabezado. */}
+      <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
+        <h2>
+          <button type="button" aria-expanded={managementOpen} aria-controls="project-modules-management"
+            onClick={() => toggleModuleSection('management')}
+            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl px-5 py-4 text-left text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">
+            <span>Gestión y seguimiento</span>
+            <span className="text-sm font-medium text-[var(--muted)]">{managementOpen ? 'Ocultar' : 'Mostrar'}</span>
+          </button>
+        </h2>
+        {managementOpen && <div id="project-modules-management" className="space-y-4 border-t border-[var(--line)] p-4 sm:p-5">
+          {!isMember && <p className="text-sm text-[var(--muted)]">No hay accesos técnicos disponibles: necesitas ser integrante de este proyecto.</p>}
       {isMember && <Surface className="p-5 sm:p-7"><div className="flex items-center gap-2"><ChartNoAxesCombined size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Evaluación e historial</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Consulta las métricas por época y las evaluaciones de prueba confirmadas en Supabase, sin recuperar el CSV.</p>
         <Link to={`/proyectos/${projectId}/historial`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Abrir historial</Link>
@@ -124,8 +185,15 @@ export function ProjectDetailPage() {
         <p className="mt-2 text-sm text-[var(--muted)]">Eventos paginados, filtros y exportación CSV, exclusivos del Responsable.</p>
         <Link to={`/proyectos/${projectId}/auditoria`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]">Ver auditoría</Link>
       </Surface>}
+        </div>}
+      </section>
+      </div>}
       {error && <Notice tone="error">{error} <button className="ml-2 underline" type="button" onClick={() => void reload()}>Reintentar</button></Notice>}
       {notice && <Notice tone="success">{notice}</Notice>}
+      {/* Integrantes mantiene la tabla y los modales compartidos sin alterar sus permisos. */}
+      {tab === 'members' && <div id="project-detail-panel-members" role="tabpanel"
+        aria-labelledby="project-detail-tab-members" tabIndex={0}
+        className="min-w-0 space-y-5 focus-visible:outline-2 focus-visible:outline-[var(--focus)]">
       <Surface className="p-5 sm:p-7">
         <header className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><Users size={19} /><h2 className="text-lg font-semibold">Integrantes</h2></div><p className="mt-2 text-xs text-[var(--muted)]">Permisos por proyecto, independientes del Administrador global.</p></div>{canManage && <Button onClick={() => { setEmail(''); setRole('reader'); setAdding(true) }}>Agregar integrante</Button>}</header>
         <div className="mt-6 overflow-x-auto">
@@ -139,6 +207,7 @@ export function ProjectDetailPage() {
         </div>
       </Surface>
       {admin && <p className="text-xs leading-6 text-[var(--muted)]">La administración global permite gestionar metadatos e integrantes, pero no concede automáticamente permisos sobre arquitecturas, datasets, entrenamientos o modelos privados.</p>}
+      </div>}
       <MemberPermissionsModal member={memberForPermissions} projectStatus={project.status} onClose={() => setMemberForPermissions(null)} />
       <ProjectForm open={editing} project={project} onClose={() => setEditing(false)} onSave={async (values) => { await perform(() => updateProject(projectId, values.name, values.description), 'Proyecto actualizado y confirmado en Supabase.') }} />
       <Modal open={adding} title="Agregar integrante" onClose={() => { if (!busy) setAdding(false) }}>

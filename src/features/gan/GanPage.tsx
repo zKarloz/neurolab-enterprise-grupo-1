@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Database, Image as ImageIcon, Layers3, Save, ShieldCheck, Sparkles, UploadCloud } from 'lucide-react'
+import { Database, Image as ImageIcon, Layers3, Save, ShieldCheck, Sparkles } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
+import { LocalCsvDropzone } from '../../components/ui/LocalCsvDropzone'
 import { InputField } from '../../components/ui/InputField'
 import { saveModelVersion, type RegisteredVersion } from '../../services/modelRegistry.ts'
 import { Notice } from '../../components/ui/Notice'
@@ -381,13 +382,8 @@ export function GanPage() {
         <Surface className="space-y-4 p-5 sm:p-6">
           <h2 className="flex items-center gap-2 text-lg font-semibold"><Database size={19}/> CSV local de imágenes reales</h2>
           <p className="text-sm text-[var(--muted)]">Imágenes en gris de 8×8 (64 píxeles) o 28×28 (784). Encabezados pixel_0…; columna label opcional al principio o al final. No se envía el archivo a Supabase.</p>
-          <label htmlFor="gan-csv" className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-muted)] p-4 text-center text-sm font-medium">
-            <UploadCloud size={22}/> Seleccionar CSV local
-          </label>
-          <input id="gan-csv" type="file" accept=".csv,text/csv" disabled={!canEdit || loading || locked} className="sr-only" onChange={(event) => {
-            void onImport(event.currentTarget.files?.[0])
-            event.currentTarget.value = ''
-          }}/>
+          <LocalCsvDropzone id="gan-csv" disabled={!canEdit || loading || locked} loading={loading}
+            onFile={(file) => onImport(file)} hint="CSV de imágenes 8×8 o 28×28; las etiquetas son opcionales y el archivo permanece local." />
           {!canEdit && <Notice>Solo Ingeniero en un proyecto activo puede importar imágenes o editar la arquitectura. Otros integrantes tienen acceso de lectura.</Notice>}
           {loading && <Spinner label="Analizando imágenes locales…"/>}
           {error && <Notice tone="error">{error}</Notice>}

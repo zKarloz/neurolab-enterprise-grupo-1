@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Binary, Database, FileSpreadsheet, Layers3, ShieldCheck, Save } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
+import { LocalCsvDropzone } from '../../components/ui/LocalCsvDropzone'
 import { InputField } from '../../components/ui/InputField'
 import { Notice } from '../../components/ui/Notice'
 import { SelectField } from '../../components/ui/SelectField'
@@ -402,8 +403,8 @@ export function RnnPage() {
           <div className="flex items-center gap-2"><FileSpreadsheet size={19} /><h2 className="text-lg font-semibold">CSV temporal local</h2></div>
           <p className="text-sm text-[var(--muted)]">Hasta {MAX_CSV_BYTES / (1024 * 1024)} MiB y {MAX_CSV_ROWS.toLocaleString('es-PE')} filas. Cabeceras obligatorias; columnas numéricas para tiempo y variables. Cada serie se ordena por tiempo, sin mezclar series.</p>
           <p className="text-xs text-[var(--muted)]">Formato de ejemplo: <code>series_id,step,temperatura,consumo,target</code>. El objetivo corresponde al siguiente paso posterior a la ventana.</p>
-          <label htmlFor="rnn-local-file" className="block text-sm font-semibold">Seleccionar CSV</label>
-          <input id="rnn-local-file" type="file" accept=".csv,text/csv" disabled={!canEdit || loading || busy} onChange={(event) => void importCsv(event.target.files?.[0])} className="block w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-[var(--surface-muted)] file:px-4 file:py-2" />
+          <LocalCsvDropzone id="rnn-local-file" disabled={!canEdit || loading || busy} loading={loading}
+            onFile={(file) => importCsv(file)} hint="CSV temporal con cabecera, serie, tiempo numérico y objetivo futuro. Procesamiento local." />
           {loading && <Spinner label="Validando CSV local…" />}
           {!canEdit && <Notice>Solo el Ingeniero de un proyecto activo puede importar datos y editar arquitecturas. El resto de miembros puede consultar el diseñador.</Notice>}
           {table && <p role="status" className="text-sm">Archivo: <strong>{fileName}</strong> · {table.rows.length} registros · {table.columns.length} columnas.</p>}

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { PropsWithChildren } from 'react'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { clearProjectModulePreferences } from '../../lib/projectModulePreferences'
 import type { AppProfile, AuthState } from '../../types/auth'
 import { isMissingAuthSession, signInIdentityChanged, verificationStarted, verificationUnavailable } from './refreshPolicy.ts'
 
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (identityError) {
         // No tener sesión es normal antes del login; no se considera error de servicio.
         if (isMissingAuthSession(identityError)) {
+          clearProjectModulePreferences()
           setState({ status: 'guest' })
           return
         }
@@ -40,11 +42,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
         console.warn('[NeuroLab/Auth] Verificación de identidad fallida', {
           status: identityError.status, name: identityError.name, code: identityError.code,
         })
-        if (identityError.status === 401 || identityError.status === 403) setState({ status: 'guest' })
+        if (identityError.status === 401 || identityError.status === 403) {
+          clearProjectModulePreferences()
+          setState({ status: 'guest' })
+        }
         else setState((previous) => verificationUnavailable(previous, 'No se pudo verificar la sesión.'))
         return
       }
       if (!identity.user) {
+        clearProjectModulePreferences()
         setState({ status: 'guest' })
         return
       }
@@ -63,6 +69,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
       // Una cuenta bloqueada pierde la vista privada aun si su JWT todavía es válido.
       if (!data || data.status !== 'active') {
+        clearProjectModulePreferences()
         setState({ status: 'blocked' })
         return
       }
@@ -103,6 +110,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const { data: { subscription } } = supabase!.auth.onAuthStateChange((event, session) => {
         // Callback SÍNCRONO: nunca llamar ni esperar aquí a la API de Supabase.
         if (event === 'SIGNED_OUT') {
+          clearProjectModulePreferences()
           if (verificationTimer !== undefined) clearTimeout(verificationTimer)
           verificationTimer = undefined
           sequence.current += 1
@@ -132,6 +140,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!supabase) return
     const { error } = await supabase.auth.signOut()
     if (error) throw error
+    clearProjectModulePreferences()
     sequence.current += 1
     setState({ status: 'guest' })
   }, [])

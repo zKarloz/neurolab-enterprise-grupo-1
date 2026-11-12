@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowRight, Database, Image as ImageIcon, Layers3, RefreshCcw, Save, ShieldCheck, SlidersHorizontal, UploadCloud } from 'lucide-react'
+import { ArrowRight, Database, Image as ImageIcon, Layers3, RefreshCcw, Save, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
+import { LocalCsvDropzone } from '../../components/ui/LocalCsvDropzone'
 import { Notice } from '../../components/ui/Notice'
 import { InputField } from '../../components/ui/InputField'
 import { SelectField } from '../../components/ui/SelectField'
@@ -80,15 +81,10 @@ function CnnDataView({ dataset, loading, error, onFile, disabled }: {
       <Surface className="p-5 sm:p-6">
         <div className="flex items-center gap-2"><Database size={19} /><h2 className="text-lg font-semibold">Dataset local</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Selecciona un CSV etiquetado. Soporta imágenes en grises de 8 × 8 (Digits) o 28 × 28 (MNIST). No se descargarán datos desde Google.</p>
-        <label htmlFor="cnn-upload-csv" className={`mt-5 flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-muted)] p-4 text-center text-sm font-medium ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-[var(--focus)]'}`}>
-          <UploadCloud size={22} />{loading ? 'Leyendo CSV…' : 'Seleccionar archivo CSV local'}
-        </label>
-        <input id="cnn-upload-csv" type="file" accept=".csv,text/csv" disabled={disabled || loading} className="sr-only" onChange={(event) => {
-          const file = event.target.files?.[0]
-          if (file) onFile(file)
-          event.currentTarget.value = ''
-        }} />
-        <p className="mt-3 text-xs leading-5 text-[var(--muted)]">Columnas: label y pixel_0… en orden. Se leen hasta 2 000 imágenes y no se envía el CSV a Supabase. Los archivos completos permanecen en tu equipo.</p>
+        <div className="mt-5">
+          <LocalCsvDropzone id="cnn-upload-csv" disabled={disabled || loading} loading={loading} onFile={onFile}
+            hint="Columnas label y pixel_0… en orden; máximo 2 000 imágenes. El CSV permanece en tu equipo." />
+        </div>
         {disabled && <Notice>Para cambiar el dataset, espera a que termine el entrenamiento o cancélalo.</Notice>}
         {loading && <Spinner className="mt-4" size="sm" label="Validando imágenes y etiquetas…" />}
         {error && <div className="mt-4"><Notice tone="error">{error}</Notice></div>}

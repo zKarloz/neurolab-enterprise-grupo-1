@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { FileSpreadsheet, ShieldAlert } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
+import { LocalCsvDropzone } from '../../components/ui/LocalCsvDropzone'
 import { Notice } from '../../components/ui/Notice'
 import { SelectField } from '../../components/ui/SelectField'
 import { Surface } from '../../components/ui/Surface'
@@ -124,9 +125,8 @@ export function LocalDatasetPage() {
         <Surface className="space-y-5 p-5 sm:p-7">
           <div className="flex items-center gap-3"><FileSpreadsheet size={21} aria-hidden="true"/><h2 className="text-lg font-semibold">Importación local</h2></div>
           <p className="text-sm leading-6 text-[var(--muted)]">Límite: {MAX_CSV_BYTES / 1024 / 1024} MiB y {MAX_CSV_ROWS.toLocaleString('es-PE')} filas, lo que se alcance primero. Se requiere cabecera.</p>
-          <label htmlFor="csv-file" className="block text-sm font-medium">Archivo CSV</label>
-          <input id="csv-file" type="file" accept=".csv,text/csv" disabled={busy || trainingBusy} onChange={(event) => void loadFile(event.target.files?.[0])}
-            className="block w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-[var(--surface-muted)] file:px-4 file:py-2 file:text-[var(--ink)]" />
+          <LocalCsvDropzone id="csv-file" disabled={busy || trainingBusy} loading={busy}
+            onFile={(file) => loadFile(file)} hint="CSV tabular con cabecera; se procesa localmente y no se envía a Supabase." />
           {trainingBusy && <Notice>Para cambiar el dataset, espera a que termine el entrenamiento y se confirme su guardado.</Notice>}
           {busy && <p role="status" className="text-sm text-[var(--muted)]">Validando el CSV local…</p>}
           {table && <p role="status" className="text-sm">{filename}: <strong>{table.rows.length}</strong> filas y <strong>{table.columns.length}</strong> columnas.</p>}
