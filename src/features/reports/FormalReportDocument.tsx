@@ -1,4 +1,5 @@
 import type { ProjectReportSnapshot } from '../../services/reporting'
+import { formatGanReportSummary } from '../../ml/evaluation/ganStoredEvaluation.ts'
 import { familyForReportRun, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
 
 interface FormalReportDocumentProps {
@@ -24,6 +25,7 @@ function formatMetric(value: unknown): string {
 }
 
 function testMetrics(metrics: Record<string, unknown> | undefined, problemType: string, family: string): string {
+  if (family === 'gan') return formatGanReportSummary(metrics)
   if (!metrics) return 'Sin evaluación'
   if (family === 'rnn' && problemType !== 'regression') return `Accuracy ${formatMetric(metrics.accuracy)} · F1 macro ${formatMetric(metrics.macroF1)}`
   if (problemType === 'multiclass') return `Accuracy ${formatMetric(metrics.accuracy)} · F1 macro ${formatMetric(metrics.macroF1)}`
@@ -99,7 +101,7 @@ export function FormalReportDocument({ data, preparedBy, familyFilter = 'all' }:
           <table className="nl-paper-table"><thead><tr><th>Nombre</th><th>Objetivo</th><th>Tipo</th><th className="nl-paper-num">Filas</th></tr></thead>
             <tbody>{data.datasets.map((item) => <tr key={item.id}>
               <td>{item.name} · v{item.version}</td><td>{item.target_column}</td>
-              <td>{item.problem_type === 'multiclass' ? 'Multiclase' : item.problem_type === 'binary' ? 'Clasificación' : 'Regresión'}</td>
+              <td>{item.problem_type === 'generative' ? 'Generativo' : item.problem_type === 'multiclass' ? 'Multiclase' : item.problem_type === 'binary' ? 'Clasificación' : 'Regresión'}</td>
               <td className="nl-paper-num">{item.row_count}</td>
             </tr>)}</tbody>
           </table>
@@ -108,11 +110,11 @@ export function FormalReportDocument({ data, preparedBy, familyFilter = 'all' }:
       </section>
 
       <section className="nl-paper-section">
-        <h2>5. Entrenamientos y resultados de prueba</h2>
+        <h2>5. Entrenamientos, pruebas y generación</h2>
         <p className="nl-paper-prose">De las {detailRuns.length} ejecuciones de la familia {familyFilter === 'all' ? 'todas' : familyFilter} consultadas, {completed} finalizaron correctamente. Se muestran las métricas disponibles para cada ejecución.</p>
         {detailRuns.length === 0 ? <p>No se registran entrenamientos.</p> : (
           <table className="nl-paper-table nl-paper-runs"><thead><tr>
-            <th>Fecha</th><th>Familia</th><th>Arquitectura / dataset</th><th>Estado</th><th>Épocas</th><th>Métricas test</th>
+            <th>Fecha</th><th>Familia</th><th>Arquitectura / dataset</th><th>Estado</th><th>Épocas</th><th>Métricas test / resumen</th>
           </tr></thead><tbody>{detailRuns.map((run) => <tr key={run.id}>
             <td>{formatDate(run.created_at)}</td>
             <td>{familyForReportRun(run) ? familyLabel(familyForReportRun(run)!) : 'Otra'}</td>
@@ -127,7 +129,7 @@ export function FormalReportDocument({ data, preparedBy, familyFilter = 'all' }:
       <section className="nl-paper-section nl-paper-methodology">
         <h2>6. Alcance y limitaciones</h2>
         <p>Los totales provienen de la base de datos y NO se filtran por familia. Las tablas detalladas presentan como máximo los 200 registros más recientes de cada conjunto consultado; por tanto, este documento puede no representar el historial completo.</p>
-        <p>Las métricas de evaluación fueron calculadas en el navegador y almacenadas por NeuroLab; no constituyen certificación independiente. No se incorporan filas del CSV original, credenciales ni archivos de pesos del modelo.</p>
+        <p>Las métricas y los resúmenes descriptivos de GAN fueron calculados en el navegador; no constituyen certificación independiente ni medida de realismo de imágenes generadas. No se incorporan filas del CSV original, credenciales ni archivos de pesos del modelo.</p>
       </section>
       <footer className="nl-paper-footer">NeuroLab Enterprise · Documento generado a partir de datos autorizados del proyecto · {dateIssued}</footer>
     </article>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Layers3, Archive, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, GitBranch, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Layers3, Archive, Check, ClipboardList, FileText, FileSpreadsheet, ChartNoAxesCombined, Database, GitBranch, Sparkles, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
@@ -100,6 +100,12 @@ export function ProjectDetailPage() {
         <div className="flex items-center gap-2"><GitBranch size={19}/><h2 className="text-lg font-semibold">Red recurrente · RNN</h2></div>
         <p className="mt-2 text-sm text-[var(--muted)]">Explora series temporales de un CSV local y diseña capas SimpleRNN o LSTM. Entrenamiento y persistencia se incorporarán en incrementos posteriores.</p>
         <Link to={`/proyectos/${projectId}/rnn`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><GitBranch size={16}/> Abrir RNN</Link>
+      </Surface>}
+      {/* GAN-1: acceso solo con membresía explícita, sin privilegio técnico para Admin global. */}
+      {isMember && <Surface className="p-5 sm:p-7">
+        <div className="flex items-center gap-2"><Sparkles size={19}/><h2 className="text-lg font-semibold">Red generativa adversarial · GAN</h2></div>
+        <p className="mt-2 text-sm text-[var(--muted)]">Explora imágenes reales en CSV local y diseña generador y discriminador. GAN-1 no entrena ni genera imágenes todavía.</p>
+        <Link to={`/proyectos/${projectId}/gan`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)]"><Sparkles size={16}/> Abrir GAN</Link>
       </Surface>}
       {isMember && <Surface className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Evaluación e historial</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">Consulta las métricas por época y las evaluaciones de prueba confirmadas en Supabase, sin recuperar el CSV.</p>

@@ -16,6 +16,10 @@ import { HISTORY_PAGE_SIZE, listHistoryPage, loadHistoryDetail } from '../../ser
 import type { HistoryRun, HistoryPage, HistoryDetail } from '../../services/evaluationPersistence.ts'
 import { CnnStoredEvaluationCard } from './CnnStoredEvaluationCard.tsx'
 import { RnnStoredEvaluationCard } from './RnnStoredEvaluationCard.tsx'
+import { GanStoredEvaluationCard } from './GanStoredEvaluationCard.tsx'
+import { GanRunComparison } from './GanRunComparison.tsx'
+import { GanMetricsChart } from '../gan/GanMetricsChart.tsx'
+import { isGanStoredEvaluation } from '../../ml/evaluation/ganStoredEvaluation.ts'
 import { isRnnStoredEvaluation } from '../../ml/evaluation/rnnStoredEvaluation.ts'
 import { compatibleHistoryRuns, familyLabel, problemLabel, type FamilyFilter } from '../../ml/evaluation/families.ts'
 
@@ -119,12 +123,12 @@ export function TrainingHistoryPage() {
   return <div className="space-y-6">
     <header>
       <h1 className="text-3xl font-semibold">Historial de entrenamientos</h1>
-      <p className="mt-2 text-sm text-[var(--muted)]">{projectName} · Datos confirmados en Supabase, sin depender del CSV local. Feedforward, CNN y RNN con métricas confirmadas y filtros por familia.</p>
+      <p className="mt-2 text-sm text-[var(--muted)]">{projectName} · Datos confirmados en Supabase, sin depender del CSV local. Feedforward, CNN, RNN y GAN con métricas confirmadas y filtros por familia.</p>
     </header>
     <Surface className="space-y-4 p-5 sm:p-7">
       <div className="flex items-center gap-2"><ClipboardList size={20}/><h2 className="text-lg font-semibold">Ejecuciones registradas</h2></div>
       <p className="text-sm text-[var(--muted)]">Filtra por familia y selecciona dos ejecuciones completadas de la misma familia y tipo de problema. Puedes elegirlas en distintas páginas del mismo filtro.</p>
-      <div className="max-w-xs"><SelectField id="history-family" label="Familia de red" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }, { value: 'rnn', label: 'RNN' }]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1); setSelected(null); setComparison([]) }}/></div>
+      <div className="max-w-xs"><SelectField id="history-family" label="Familia de red" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }, { value: 'rnn', label: 'RNN' }, { value: 'gan', label: 'GAN' }]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1); setSelected(null); setComparison([]) }}/></div>
       {comparison.length > 0 && <div className="flex flex-wrap items-center gap-2 text-sm" aria-live="polite">
         <span>{comparison.length}/2 seleccionadas</span>
         {comparison.map((run, index) => <span key={run.id} className="rounded-lg border border-[var(--line)] p-2">{index === 0 ? 'A' : 'B'} · {run.id.slice(0, 8)}</span>)}
@@ -156,20 +160,25 @@ export function TrainingHistoryPage() {
     </Surface>
     {comparisonBusy && <p role="status" className="text-sm">Recuperando dos ejecuciones para comparar…</p>}
     {comparisonError && <Notice tone="error">{comparisonError}</Notice>}
-    {comparison.length === 2 && comparedDetails && <RunComparison first={comparison[0]} second={comparison[1]}
-      firstDetail={comparedDetails[0]} secondDetail={comparedDetails[1]}/>}
+    {comparison.length === 2 && comparedDetails && (comparison[0].family === 'gan'
+      ? <GanRunComparison first={comparison[0]} second={comparison[1]} firstDetail={comparedDetails[0]} secondDetail={comparedDetails[1]}/>
+      : <RunComparison first={comparison[0]} second={comparison[1]} firstDetail={comparedDetails[0]} secondDetail={comparedDetails[1]}/>)}
     {selected && <section className="space-y-4" aria-live="polite">
       <h2 className="break-all text-lg font-semibold">Detalle · {selected.id}</h2>
       {detailLoading && <p role="status" className="text-sm">Recuperando métricas confirmadas…</p>}
       {detailError && <Notice tone="error">{detailError}</Notice>}
       {detail && <>
-        {detail.epochs.length ? <TrainingMetricsChart epochs={detail.epochs} problemType={selected.problem_type}/> : <Notice>No hay épocas completas confirmadas para representar.</Notice>}
-        {detail.evaluation ? isRnnStoredEvaluation(detail.evaluation)
+        {selected.family === 'gan'
+          ? (detail.ganEpochs.length ? <GanMetricsChart epochs={detail.ganEpochs}/> : <Notice>Sin épocas GAN completas confirmadas.</Notice>)
+          : (detail.epochs.length ? <TrainingMetricsChart epochs={detail.epochs} problemType={selected.problem_type}/> : <Notice>No hay épocas completas confirmadas para representar.</Notice>)}
+        {detail.evaluation ? isGanStoredEvaluation(detail.evaluation)
+          ? <GanStoredEvaluationCard evaluation={detail.evaluation}/>
+          : isRnnStoredEvaluation(detail.evaluation)
           ? <RnnStoredEvaluationCard evaluation={detail.evaluation}/>
           : detail.evaluation.problemType === 'multiclass'
             ? <CnnStoredEvaluationCard evaluation={detail.evaluation}/>
             : <TestEvaluationCard evaluation={detail.evaluation} confirmed/> :
-          <Notice>No existe evaluación final guardada para esta ejecución. Es normal en entrenamientos de la Fase 3, cancelados o fallidos.</Notice>}
+          <Notice>No existe evaluación o resumen final guardado para esta ejecución. Es normal en entrenamientos antiguos, cancelados o fallidos.</Notice>}
       </>}
     </section>}
   </div>

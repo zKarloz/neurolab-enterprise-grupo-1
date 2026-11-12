@@ -507,3 +507,297 @@ Las tareas operativas pendientes de Fase 6 (Docker/restore Auth/Storage) siguen 
 GAN comienza tras el cierre de RNN, sin atribuirle funcionalidades aún no implementadas.
 <!-- RNN5_CIERRE_FIN -->
 
+<!-- GAN1_INICIO -->
+## GAN-1 — Datos de imágenes y diseñador de generador/discriminador
+
+**Estado:** preparada para validación de integración en NeuroLab.
+
+- Arquitectura **GAN densa no condicional** (generador + discriminador), diseñada
+  para imágenes reales **8×8 o 28×28 en gris**. No hay entrenamiento en GAN-1.
+- Generador: ruido latente (16/32/64) → dos Dense con LeakyReLU → Dense tanh
+  con salida `[alto, ancho, 1]` de valores en [-1,1].
+- Discriminador: imagen normalizada → Flatten → dos Dense con LeakyReLU →
+  sigmoid de autenticidad. Los parámetros Dense incluyen sesgos.
+- Datos: CSV local de 64/784 píxeles numéricos (0–255), con columna
+  `label` opcional (se ignora), mínimo 100 imágenes, máximo 2 000 retenidas,
+  archivo limitado a 200 MB; vista previa muestra imágenes **reales**.
+- Para imágenes Digits 8×8 con valores hasta 16 se reescala a 0–255.
+  GAN-2 normalizará desde el dataset validado a [-1,1] para la salida tanh.
+- Permisos: lectura para miembros explícitos; solo el Ingeniero en proyecto
+  activo importa datos y modifica el diseñador. El administrador global
+  sin membresía no obtiene acceso técnico.
+- Sin SQL, RPC, nuevas políticas RLS, almacenamiento remoto, pesos, inferencia
+  ni imágenes artificiales en GAN-1. El dataset no sale del navegador.
+- Entrenamiento adversarial real (Worker, optimizadores separados, pérdidas G/D
+  y cancelación) se implementará en **GAN-2**. Muestras generadas y evaluación
+  en **GAN-3**; persistencia y versiones en **GAN-4**; auditoría y cierre en **GAN-5**.
+
+### Validación GAN-1
+
+```bash
+node --experimental-strip-types --test tests/gan1.*.test.mjs
+npm run typecheck
+npm run build
+npm run dev
+```
+
+En un proyecto activo con cuenta Ingeniero: abrir **GAN** desde la tarjeta,
+importar `tests/fixtures/gan1_imagenes_demo.csv` (120 filas de prueba sintéticas,
+no un dataset real para medir calidad), comprobar 8×8, vista previa,
+constructor con dos diagramas y actualización de parámetros. Rechazar CSV
+inválido; comprobar vista de solo lectura con rol Revisor/Lector y ausencia
+completa de generación o métricas ficticias. Comprobar Feedforward/CNN/RNN.
+<!-- GAN1_FIN -->
+
+<!-- GAN2_INICIO -->
+## GAN-2 — Entrenamiento adversarial real con TensorFlow.js
+
+**Estado:** preparada para validación local; no considerar cerrada hasta validar runtime TensorFlow.js y build en VSCode.
+
+- GAN densa no condicional de **dos redes**: generador G con ruido normal, dos capas Dense
+  y activaciones LeakyReLU, salida tanh \([-1,1]\); discriminador D con Flatten,
+  dos Dense LeakyReLU y sigmoid.
+- **Entrenamiento adversarial alternado**: actualizar D con imágenes reales/falsas
+  (etiquetas 1/0), actualizar G después con pérdida no saturante. Optimizadores
+  Adam independientes (beta1 0,5) y actualización de variables separadas.
+- CSV gris 8×8 / 28×28 limitado a 2 000 muestras en memoria. Las imágenes
+  del importador ya están en [0,255] y se normalizan a [-1,1] por minibatch.
+  No se usan etiquetas `label` del CSV, ni test/accuracy supervisados.
+- Métricas reales por época: pérdida binaria de D, pérdida de G, medias de
+  D(real) y D(falso). Las pérdidas GAN **no equivalen** a calidad visual ni a
+  métricas de clasificación; el CSV de demostración es sintético.
+- Worker dedicado (CPU) con fallback al hilo principal **solo si el Worker falla
+  antes de iniciar entrenamiento**. Progreso por minibatch y cancelación
+  cooperativa confirmada; estado y tensores se liberan al finalizar.
+- Solo miembros Ingeniero en proyecto activo pueden importar, configurar y
+  entrenar. Al cambiar CSV, arquitectura, proyecto o usuario se cancela/descarta
+  cualquier entrenamiento previo. El resto conserva lectura.
+- GAN-2 **no conserva pesos para generar imágenes** después de entrenar; GAN-3
+  añadirá inferencia visual y evaluación. GAN-4 incorporará persistencia en
+  Supabase y versiones de modelos. No se crean migraciones, RPC ni datos remotos.
+
+### Validación GAN-2
+
+```bash
+node --experimental-strip-types --test tests/gan1.*.test.mjs tests/gan2.training-data.test.mjs tests/gan2.contract.test.mjs
+node --experimental-strip-types --test tests/gan2.runtime.test.mjs
+npm run typecheck
+npm run build
+npm run dev
+```
+
+Como Ingeniero, importar `tests/fixtures/gan1_imagenes_demo.csv` (120 imágenes),
+seleccionar G/D predeterminados y entrenar con 2 épocas, batch 16,
+learning rate 0.0002. Verificar pérdidas G/D finitas, progreso 100%, backend
+cpu / worker, y reentrenar con 5 épocas para comprobar cancelación cooperativa.
+Comprobar que cambiar arquitectura o CSV invalida las métricas antiguas; en
+Revisor/Lector se muestran las pestañas sin habilitar entrenamiento.
+<!-- GAN2_FIN -->
+
+<!-- GAN3_INICIO -->
+## GAN-3 — Generación local y evaluación descriptiva de muestras
+
+**Estado:** implementación preparada; validar el test CPU de generación y el build en VSCode antes de cerrar GAN-3.
+
+- Tras completar el entrenamiento adversarial de GAN-2, **se conserva únicamente el generador entrenado G** en la sesión local del Worker (o fallback principal); el discriminador y ambos optimizadores se liberan. La cancelación y los errores descartan todos los modelos.
+- El generador recibe **ruido normal nuevo** por solicitud y crea 4, 8 o 16 imágenes sintéticas en gris de 8×8 o 28×28. La salida de tanh se transforma de [-1,1] a bytes [0,255]. No se sustituye por muestras reales ni predicciones prefabricadas.
+- Vista en cuadrícula y descarga **PNG local** de muestras individuales, usando el componente reutilizado de lienzo gris para ejemplos reales y generados.
+- Diagnósticos descriptivos basados en píxeles: brillo medio, rango de intensidad y diferencia absoluta media entre pares. **No** son FID, Inception Score, clasificación ni prueba de realismo. Es necesaria evaluación humana y datasets adecuados para valorar la calidad.
+- El Worker transfiere únicamente los bytes de salida y correlaciona peticiones mediante requestId. Si el Worker falla tras entrenar, **no se reinicia el entrenamiento automáticamente** ni se inventan los pesos.
+- Cambiar CSV, arquitectura, opciones, proyecto o usuario, o desmontar la pantalla, libera G e invalida muestras y respuestas pendientes. Cambiar de pestaña conserva la sesión mientras el módulo permanezca montado.
+- En GAN-3 **no hay persistencia ni RPC**: ningún dato del CSV, modelo, imagen generada o métrica viaja a Supabase. GAN-4 abordará persistencia de ejecuciones, versiones y consulta histórica.
+
+### Validación GAN-3
+
+```bash
+node --experimental-strip-types --test tests/gan1.*.test.mjs tests/gan2.contract.test.mjs tests/gan2.training-data.test.mjs tests/gan3.generation.test.mjs tests/gan3.contract.test.mjs
+node --experimental-strip-types --test tests/gan2.runtime.test.mjs tests/gan3.runtime.test.mjs
+npm run typecheck
+npm run build
+npm run dev
+```
+
+Como Ingeniero: cargar el CSV de 120 imágenes 8×8, entrenar dos épocas, abrir **Generar**, producir 4 y después 8 imágenes y descargar un PNG. Comprobar que dos generaciones son distintas, que el componente muestra los diagnósticos sin confundirlos con calidad, y que cambiar arquitectura/CSV deshabilita la generación hasta reentrenar. Comprobar cancelación en cinco épocas y que no permite generar. Feedforward, CNN y RNN deben permanecer funcionales.
+<!-- GAN3_FIN -->
+
+<!-- GAN4A_INICIO -->
+## GAN-4A — Contrato de persistencia adversarial en Supabase
+
+**Estado:** migración SQL preparada. No conectar el entrenamiento hasta validar la migración 016 y el diagnóstico. No hay nuevas escrituras desde la UI en GAN-4A.
+
+- Migración `202611120016_gan_adversarial.sql`: añade `gan` a architectures.family y `generative` a problem_type en datasets/training_runs/run_evaluations; **no se confunde con clasificación binaria**. Conserva filas y funciones de Feedforward, CNN y RNN. Amplía los límites de épocas en training_runs y training_metrics de 50 a **100** para compatibilidad con GAN-3.
+- Cuatro nombres de métricas adversariales: `generator_loss`, `discriminator_loss`, `d_real`, `d_fake`. Se registran como indicadores de entrenamiento, no precisión supervisada ni medidas de realismo.
+- RPC `create_gan_training_run`: recibe nombre/huella SHA-256 del CSV completo, tamaño, resolución 8×8/28×28, cantidad de imágenes, escala original y configuración G/D, sin píxeles ni filas. El campo `seed=0` indica explícitamente que el ruido usado por GAN-3 **no tiene semilla fija**.
+- RPC `record_gan_training_epoch`: después de `set_training_runtime`, exige Ingeniero del proyecto, autor original, estado running, orden estrictamente consecutivo y cuatro métricas reales finitas. Sigue usando `finish_training_run` para el cierre.
+- RPC `record_gan_generation_summary`: UNA vez después de completar entrenamiento. Registra en run_evaluations únicamente un resumen descriptivo de 4/8/16 imágenes (brillo, diferencia media y rangos) para el futuro versionado privado. No guarda imágenes, ruido, PNG ni muestras. **No equivale a FID, IS ni evaluación científica**.
+- Las tres RPC usan SECURITY DEFINER con search_path fijo; solo authenticated recibe EXECUTE. No se conceden escrituras directas a las tablas ni se cambian políticas RLS. El administrador global sin membresía sigue sin permiso técnico automático.
+- `src/ml/gan/persistencePayload.ts` define el contrato de metadatos y resúmenes que conectaremos desde el frontend en GAN-4B, después de validar los permisos y la migración.
+- Fases siguientes: **GAN-4B** (cola de persistencia, épocas y resumen), **GAN-4C** (versionado/restauración de G), **GAN-4D** (historial, comparación y reportes), **GAN-5** (auditoría de cinco roles, pruebas y cierre).
+
+### Aplicación y verificación GAN-4A
+
+1. Descomprimir el paquete en la raíz del repositorio. Ejecutar `node --experimental-strip-types --test tests/gan4a.*.test.mjs`, `npm run typecheck` y `npm run build`.
+2. En Supabase SQL Editor, ejecutar **una sola vez** el contenido de `supabase/migrations/202611120016_gan_adversarial.sql` (después de 015).
+3. En una consulta nueva ejecutar `supabase/tests/FASE_7_GAN4A_VERIFICACION.sql`. Debe devolver una fila con 8 tablas RLS, 3 RPC, permisos correctos, límites 100 y 0 privilegios de escritura directa.
+4. Comprobar en navegador que GAN-3 sigue entrenando/generando localmente; **GAN-4A todavía no guarda ejecuciones GAN en Supabase**.
+
+No reejecutar 011–015. Los datos existentes no se eliminan. El SQL Editor no confirma aislamiento por identidad de usuario: GAN-5 realizará la auditoría con cinco roles reales.
+<!-- GAN4A_FIN -->
+
+<!-- GAN4B_INICIO -->
+## GAN-4B — Persistencia de entrenamiento adversarial y resumen descriptivo
+
+**Estado:** código preparado. La persistencia real solo se valida tras una ejecución autenticada de Supabase y confirmación SQL del run GAN.
+
+- Se reusan las RPC creadas por migración 016: `create_gan_training_run`, `record_gan_training_epoch` y `record_gan_generation_summary`, además de `set_training_runtime` y `finish_training_run`. **No hay migración 017 en GAN-4B**.
+- El CSV se analiza localmente. Antes de iniciar TF.js se calcula SHA-256 del **archivo completo**, se valida el manifiesto y se registra un run. Se envían nombre, tamaño, hash, número de imágenes, dimensión, arquitectura e hiperparámetros; **nunca bytes de CSV, píxeles, imágenes o pesos**.
+- Una cola serializa confirmación de backend, cuatro métricas reales por época (generator_loss, discriminator_loss, d_real, d_fake) y cierre remoto (completed, failed, cancelled o interrupted). Cada época se confirma antes de la siguiente escritura. No se muestran confirmaciones falsas cuando falla una RPC, ni se reintentan escrituras no idempotentes.
+- Solo después del estado remoto completed, el primer lote de 4/8/16 imágenes generadas puede guardar un **resumen descriptivo** (brillo, distancia media, mínimo y máximo), no las imágenes. La RPC 016 admite un único resumen por run. Fallas en el resumen no revierten una ejecución ya completada.
+- Se conserva la generación local y PNG; la interfaz muestra el UUID, épocas confirmadas y estado de sincronización. Cambiar archivo, arquitectura, opciones, proyecto o usuario cancela la sesión local y aplica un cierre interrupted de mejor esfuerzo si corresponde.
+- Los resultados guardados proceden del navegador: PostgreSQL aplica validaciones de forma y permisos, pero no demuestra por sí solo la autenticidad matemática del entrenamiento.
+
+### Comprobación GAN-4B
+
+```bash
+node --experimental-strip-types --test tests/gan4b.*.test.mjs
+npm run typecheck
+npm run build
+```
+
+Entrenar un dataset local válido con 2 épocas, batch 16 y 0.0002. Verificar: run UUID, 2/2 épocas confirmadas, 8 filas de métricas, estado completed. Generar 8 imágenes y confirmar un único resumen de 8 muestras. La consulta `supabase/tests/FASE_7_GAN4B_VERIFICACION.sql` retorna una sola tabla; `entrenamiento_consistente = true`, `resumenes_generacion = 1`, `resumen_solo_agregados = true`. La consulta es solo lectura. No volver a ejecutar la migración 016.
+
+**Próximo:** GAN-4C guardará el generador y lo restaurará desde modelos privados.
+<!-- GAN4B_FIN -->
+
+<!-- GAN4C_INICIO -->
+## GAN-4C — Versiones privadas y restauración de generadores
+
+**Estado:** implementación preparada; requiere pruebas reales TensorFlow.js, compilación y publicación autenticada de una versión GAN.
+
+- Exportar **solo el generador G** desde el Worker o fallback local a `model.json` y `weights.bin` mediante TensorFlow.js. No guardar el discriminador D, sus optimizadores, CSV, muestras ni imágenes sintéticas.
+- Reutilizar `reserve_model_upload` y `publish_model_version`, Storage privado `model-artifacts` y hashes SHA-256; sin ampliar RLS y sin SQL adicional. Vincular la versión al run GAN completado y a su manifiesto original (8×8/28×28, latentSize y tanh [-1,1]).
+- La RPC de reserva F5 exige `run_evaluations`: GAN cumple este requisito guardando previamente el **único resumen descriptivo** de un lote generado mediante GAN-4A. No equivale a test supervisado, FID, IS ni medida de realismo.
+- En Modelos privados, los miembros autorizados filtran GAN, descargan una versión bajo JWT, verifican hashes y topología de G y generan 4, 8 o 16 muestras sin importar CSV ni reentrenar. Cada generación usa ruido nuevo exclusivamente local.
+- Al cambiar versión/proyecto o cerrar la vista se libera el modelo restaurado. Al cambiar dataset, arquitectura, opciones, usuario o salir del módulo GAN se libera el modelo local.
+
+### Comprobación GAN-4C
+
+```bash
+node --experimental-strip-types --test tests/gan4c.manifest.test.mjs tests/gan4c.contract.test.mjs
+node --experimental-strip-types --test tests/gan4c.runtime.test.mjs
+npm run typecheck
+npm run build
+```
+
+Como Ingeniero: importar 8×8, entrenar dos épocas, generar ocho imágenes, esperar resumen confirmado y Guardar versión GAN. Desde Modelos privados filtrar GAN, restaurar, generar y descargar PNG sin CSV. Repetir tras recargar sesión. Ejecutar `supabase/tests/FASE_7_GAN4C_VERIFICACION.sql`. No hay migración 017.
+
+**Próximo:** GAN-4D incorporará historial y reportes históricos GAN.
+<!-- GAN4C_FIN -->
+
+<!-- GAN4D_INICIO -->
+## GAN-4D — Historial, comparación y reportes unificados
+
+**Estado:** código y SQL de diagnóstico preparados; requiere `typecheck`, `build` y validación funcional con una ejecución GAN persistida. Sin migraciones nuevas.
+
+- La consulta de historial incluye `architectures.family = 'gan'` y pagina en PostgreSQL. La tarea es `problem_type = 'generative'`, no clasificación ni regresión; lectura protegida por RLS.
+- Se recuperan las cuatro métricas de cada época: `generator_loss`, `discriminator_loss`, `d_real` y `d_fake`, siempre como `split = 'train'`. Hasta **100 épocas × 4 = 400 métricas**. No se inventan valores, métricas de validación ni curvas faltantes.
+- El primer lote generado se resume con `kind: 'descriptive_only'`: imágenes, resolución, brillo medio, diferencia entre imágenes y rango de píxeles. No contiene imágenes, ejemplos individuales ni pesos. No es FID ni una medida certificada de calidad visual.
+- Comparación entre dos GAN completadas de la misma resolución 8×8 o 28×28. Sus pérdidas G/D y resúmenes no permiten declarar un ganador; datasets, ruido y lotes pueden ser distintos.
+- La pantalla y las exportaciones CSV/PDF filtran Feedforward, CNN, RNN y GAN. El CSV añade las columnas `gan_imagenes`, `gan_dimension`, `gan_brillo_medio`, `gan_diferencia_media`, `gan_pixel_min` y `gan_pixel_max`. Para GAN, columnas de métricas de test supervisado permanecen vacías.
+- Totales globales sin filtrar; reportes con límite de las últimas 200 ejecuciones y ocho por página de historial. Sin modificaciones de datos, migraciones ni acceso a PNG privados.
+
+### Comprobación GAN-4D
+
+```bash
+node --experimental-strip-types --test tests/gan4d.*.test.mjs
+npm run typecheck
+npm run build
+npm run dev
+```
+
+Abrir Historial → GAN; comprobar cuatro métricas por época y resumen del primer lote. Comparar dos GAN de la misma dimensión, comprobar que los reportes GAN CSV/PDF muestran diagnósticos y no accuracy/RMSE, y que las otras familias siguen funcionando. Ejecutar `supabase/tests/FASE_7_GAN4D_VERIFICACION.sql` (una tabla, solo lectura). No ejecutar migraciones 011–016 de nuevo.
+
+**Siguiente:** GAN-5, seguridad de cinco roles, pruebas integrales y cierre.
+<!-- GAN4D_FIN -->
+
+<!-- GAN5_CIERRE_INICIO -->
+## GAN-5 — Seguridad, validación y cierre de redes generativas
+
+**Estado:** LISTA PARA VALIDACIÓN. El cierre formal depende de pruebas completas en VSCode,
+auditoría SQL, cinco identidades RLS/Storage y despliegue HTTPS de la misma revisión.
+
+### Alcance y principios
+
+- GAN-1 a GAN-3: importación CSV 8×8/28×28, dos redes Dense, entrenamiento adversarial
+  real con TensorFlow.js y generación local de 4/8/16 imágenes. No son DCGAN ni cGAN.
+- GAN-4A/4B: tres RPC GAN; las métricas registradas son `generator_loss`,
+  `discriminator_loss`, `d_real` y `d_fake`, cuatro por época (hasta 100 épocas).
+  Después de completar, al generar por primera vez, se guarda **un** resumen
+  descriptivo de generación, no test
+  supervisado, FID, IS ni un indicador de calidad visual.
+- GAN-4C: solo se versionan los pesos de **G** y el manifiesto de normalización;
+  `model.json` y `weights.bin` permanecen en el bucket privado `model-artifacts`.
+  La restauración genera imágenes sin CSV y sin entrenamiento nuevo.
+- GAN-4D: historial y CSV/PDF de cuatro familias (Feedforward/CNN/RNN/GAN),
+  comparación de GAN solo entre resoluciones compatibles y exportación de agregados.
+- GAN-5 **no añade migraciones, cambios React ni dependencias**. Contiene auditorías,
+  regresiones y una checklist de aceptación sin datos de producción.
+
+### Pruebas técnicas
+
+`supabase/tests/FASE_7_GAN5_AUDITORIA_READONLY.sql`: una consulta SQL de solo lectura,
+una fila; verifica 8 tablas RLS, 3 RPC con `SECURITY DEFINER` y permisos
+`authenticated`, bucket privado, 4 métricas por época, hasta 400 métricas,
+resumen sin píxeles y versiones con hashes/rutas. **SQL Editor no prueba permisos RLS por JWT.**
+
+`scripts/test-gan5-live.mjs`: auditoría con cinco cuentas reales, cada una con
+JWT independiente y `anon/publishable key`, sin `service_role`. Los cuatro
+miembros de proyecto (Responsable, Ingeniero, Revisor, Lector) deben poder leer los
+recursos técnicos; el Administrador global **sin membresía** debe recibir cero filas o
+acceso denegado al Storage privado. Verifica SHA-256 de ambos archivos descargados.
+La coincidencia de hashes demuestra integridad respecto a los hashes registrados, no
+prueba independencia de entrenamiento ni autoría de los pesos. No se prueban permisos
+de escritura con esta auditoría de lectura.
+
+Configuración local (no subir a Git): `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_PUBLISHABLE_KEY`, cinco parejas `TEST_F6_*_EMAIL/PASSWORD`,
+`TEST_GAN5_PROJECT_ID` y, de forma opcional, `TEST_GAN5_VERSION_ID`.
+El UUID del proyecto debe ser el **id de public.projects**, no el ref de Supabase
+ni el id de una ejecución. Se requiere una versión GAN real publicada y un Admin
+sin membresía en ese proyecto. No imprimir credenciales ni tokens.
+
+```bash
+node --experimental-strip-types --test tests/gan5.*.test.mjs
+node --experimental-strip-types --test tests/gan2.runtime.test.mjs tests/gan3.runtime.test.mjs tests/gan4c.runtime.test.mjs
+npm run typecheck
+npm run build
+git diff --check
+node --env-file=.env.test.local scripts/test-gan5-live.mjs
+```
+
+### Lista de aceptación antes de marcar GAN cerrada
+
+- [ ] Probar importación de CSV reales 8×8 y construcción de G/D con Ingeniero;
+      Revisor/Lector sin controles de edición/entrenamiento.
+- [ ] Entrenar 2 épocas (rápido) y un experimento real; curvas G/D, estados de error y
+      cancelación. No confundir pérdida adversarial con realismo de imágenes.
+- [ ] Generar 4, 8 y 16 imágenes, descargar PNG, liberar memoria al cambiar
+      arquitectura/datos/usuario. Nunca subir CSV, píxeles ni imágenes a Supabase.
+- [ ] Confirmar 4 métricas por época, 1 resumen descriptivo, versión privada de G,
+      restauración sin CSV tras recargar, hashes y rutas validadas.
+- [ ] Historial, comparación y CSV/PDF: filtros de Feedforward/CNN/RNN/GAN;
+      GAN descriptiva, no precisión/clasificación, mismas dimensiones al comparar.
+- [ ] Prueba SQL de una fila aprobada; auditoría cinco roles JWT/Storage aprobada;
+      revisar también permisos de escritura desde la UI según roles del proyecto.
+- [ ] Revisar tema claro por defecto, oscuro en escala de grises, teclado y móvil.
+- [ ] Versionar cambios definitivos sin *.tar.gz, payloads, parches temporales ni
+      `.env.test.local`. Confirmar build limpio en Vercel y pruebas HTTPS.
+- [ ] Documentar fecha, hash del commit publicado, resultado del último despliegue,
+      verificación SQL, total de pruebas y aceptación final.
+
+**Criterio de cierre GAN / Fase 7:** todas las comprobaciones funcionales,
+autorizaciones por usuario y despliegue de las cuatro familias deben pasar antes de
+marcar la fase como CERRADA. El pendiente operacional de restauración Docker de
+Fase 6 permanece registrado por separado y no se considera solucionado por GAN-5.
+<!-- GAN5_CIERRE_FIN -->
+

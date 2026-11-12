@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Notice } from '../../components/ui/Notice'
 import { Pagination } from '../../components/ui/Pagination'
 import { SelectField } from '../../components/ui/SelectField'
+import { formatGanReportSummary, ganReportColumns } from '../../ml/evaluation/ganStoredEvaluation.ts'
 import { familyForReportRun, familyLabel, reportRunsByFamily, type FamilyFilter } from '../../ml/evaluation/families.ts'
 import { Spinner } from '../../components/ui/Spinner'
 import { Surface } from '../../components/ui/Surface'
@@ -74,13 +75,15 @@ export function ProjectReportPage() {
             datasetsById.get(run.dataset_id) ?? '', evaluation.loss ?? '', evaluation.accuracy ?? '',
             evaluation.precision ?? '', evaluation.recall ?? '', evaluation.f1 ?? '', evaluation.mse ?? '',
             evaluation.rmse ?? '', evaluation.mae ?? '', evaluation.r2 ?? '',
-            evaluation.macroPrecision ?? '', evaluation.macroRecall ?? '', evaluation.macroF1 ?? '']
+            evaluation.macroPrecision ?? '', evaluation.macroRecall ?? '', evaluation.macroF1 ?? '',
+            ...((run.family === 'gan') ? ganReportColumns(evaluation) : ['', '', '', '', '', ''])]
         })
         saveCsv(`neurolab-reporte-${projectId.slice(0, 8)}-${family}.csv`, toCsv(
           ['run_id','fecha','familia','problema','estado','epocas_confirmadas','epocas_planificadas','backend',
             'arquitectura','dataset','loss_test','accuracy_test','precision_test','recall_test',
             'f1_test','mse_test','rmse_test','mae_test','r2_test',
-            'precision_macro','recall_macro','f1_macro'], rows,
+            'precision_macro','recall_macro','f1_macro','gan_imagenes','gan_dimension',
+            'gan_brillo_medio','gan_diferencia_media','gan_pixel_min','gan_pixel_max'], rows,
         ))
       }
     } catch (cause) {
@@ -136,18 +139,18 @@ export function ProjectReportPage() {
           <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${data.runs.length ? 100 * completed / data.runs.length : 0}%` }}/>
         </div>
         <p className="text-xs leading-5 text-[var(--muted)]">Los totales corresponden al proyecto; los detalles y las proporciones representan hasta las 200 ejecuciones más recientes. Las métricas reportadas fueron calculadas en el navegador, no certificadas en servidor.</p>
-        <p className="text-sm">{data.evaluations.length} evaluaciones de prueba consultadas.</p>
+        <p className="text-sm">{data.evaluations.length} evaluaciones o resúmenes de generación consultados.</p>
         <p className="text-xs text-[var(--muted)]">No se incluyen filas del CSV original ni pesos del modelo.</p>
       </Surface>
     </div>
     <Surface className="space-y-4 p-5 sm:p-7">
       <h2 className="text-lg font-semibold">Historial de entrenamiento</h2>
-      <div className="report-no-print max-w-xs"><SelectField id="report-family" label="Filtrar familias en detalle y exportaciones" value={family} options={[{value:'all',label:'Todas las familias'},{value:'feedforward',label:'Feedforward'},{value:'cnn',label:'CNN'},{value:'rnn',label:'RNN'}]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1) }}/></div>
+      <div className="report-no-print max-w-xs"><SelectField id="report-family" label="Filtrar familias en detalle y exportaciones" value={family} options={[{value:'all',label:'Todas las familias'},{value:'feedforward',label:'Feedforward'},{value:'cnn',label:'CNN'},{value:'rnn',label:'RNN'},{value:'gan',label:'GAN'}]} onChange={(event) => { setFamily(event.target.value as FamilyFilter); setPage(1) }}/></div>
       <p className="text-xs text-[var(--muted)]">Hasta 200 ejecuciones recientes por proyecto. El filtro afecta al detalle y a las exportaciones CSV/PDF; los totales globales no cambian. Si existen más de 200 ejecuciones, este filtro solo cubre la muestra consultada.</p>
-      {filteredRuns.length === 0 ? <Notice>No hay ejecuciones para la familia seleccionada en la muestra reciente.</Notice> : <div className="report-table overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="p-3">Fecha</th><th className="p-3">Familia</th><th className="p-3">Arquitectura</th><th className="p-3">Estado</th><th className="p-3">Épocas</th><th className="p-3">Resultado test</th></tr></thead>
+      {filteredRuns.length === 0 ? <Notice>No hay ejecuciones para la familia seleccionada en la muestra reciente.</Notice> : <div className="report-table overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="p-3">Fecha</th><th className="p-3">Familia</th><th className="p-3">Arquitectura</th><th className="p-3">Estado</th><th className="p-3">Épocas</th><th className="p-3">Resultado / resumen</th></tr></thead>
         <tbody>{pageRuns.map((run) => {
           const evaluation = evaluationByRun.get(run.id)
-          return <tr key={run.id} className="border-b border-[var(--line)] last:border-0"><td className="p-3 whitespace-nowrap">{new Date(run.created_at).toLocaleString('es-PE')}</td><td className="p-3">{familyForReportRun(run) ? familyLabel(familyForReportRun(run)!) : 'Otra'}</td><td className="p-3">{architecturesById.get(run.architecture_id) ?? 'Arquitectura anterior'}</td><td className="p-3">{statusNames[run.status] ?? run.status}</td><td className="p-3 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td><td className="p-3 tabular-nums">{evaluation ? (run.family === 'rnn' && run.problem_type !== 'regression' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'multiclass' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'binary' ? `Exactitud ${metric(evaluation.accuracy)}` : `RMSE ${metric(evaluation.rmse)}`) : 'Sin evaluación'}</td></tr>
+          return <tr key={run.id} className="border-b border-[var(--line)] last:border-0"><td className="p-3 whitespace-nowrap">{new Date(run.created_at).toLocaleString('es-PE')}</td><td className="p-3">{familyForReportRun(run) ? familyLabel(familyForReportRun(run)!) : 'Otra'}</td><td className="p-3">{architecturesById.get(run.architecture_id) ?? 'Arquitectura anterior'}</td><td className="p-3">{statusNames[run.status] ?? run.status}</td><td className="p-3 tabular-nums">{run.completed_epochs}/{run.epochs_planned}</td><td className="p-3 tabular-nums">{run.family === 'gan' ? formatGanReportSummary(evaluation) : evaluation ? (run.family === 'rnn' && run.problem_type !== 'regression' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'multiclass' ? `Accuracy ${metric(evaluation.accuracy)} · F1 macro ${metric(evaluation.macroF1)}` : run.problem_type === 'binary' ? `Exactitud ${metric(evaluation.accuracy)}` : `RMSE ${metric(evaluation.rmse)}`) : 'Sin evaluación'}</td></tr>
         })}</tbody></table></div>}
       <div className="report-no-print"><Pagination page={page} pageSize={PAGE_SIZE} total={filteredRuns.length} onPageChange={setPage}/></div>
     </Surface>

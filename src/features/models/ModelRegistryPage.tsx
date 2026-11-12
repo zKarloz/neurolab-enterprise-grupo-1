@@ -17,12 +17,15 @@ import { loadDensePredictor } from '../../ml/models/artifacts'
 import { isCnnManifest, loadCnnPredictor } from '../../ml/cnn/modelPersistence.ts'
 import { isRnnManifest, loadRnnPredictor } from '../../ml/rnn/modelPersistence.ts'
 import { RnnRestoredPredictionCard } from './RnnRestoredPredictionCard'
+import { isGanManifest, loadGanGenerator } from '../../ml/gan/modelPersistence.ts'
+import { GanRestoredGenerationCard } from './GanRestoredGenerationCard'
 import { CnnRestoredPredictionCard } from './CnnRestoredPredictionCard'
 import { ModelReviewsSection } from './ModelReviewsSection'
 
 const PAGE_SIZE = 8
+type RegistryFamilyFilter = FamilyFilter | 'gan'
 
-type LoadedPredictor = Awaited<ReturnType<typeof loadDensePredictor>> | Awaited<ReturnType<typeof loadCnnPredictor>> | Awaited<ReturnType<typeof loadRnnPredictor>>
+type LoadedPredictor = Awaited<ReturnType<typeof loadDensePredictor>> | Awaited<ReturnType<typeof loadCnnPredictor>> | Awaited<ReturnType<typeof loadRnnPredictor>> | Awaited<ReturnType<typeof loadGanGenerator>>
 
 /** Registro F5: solo miembros de proyecto, lectura de archivos privados JWT y sin CSV. */
 export function ModelRegistryPage() {
@@ -34,7 +37,7 @@ export function ModelRegistryPage() {
   const [models, setModels] = useState<RegisteredModel[]>([])
   const [versions, setVersions] = useState<RegisteredVersion[]>([])
   const [page, setPage] = useState(1)
-  const [family, setFamily] = useState<FamilyFilter>('all')
+  const [family, setFamily] = useState<RegistryFamilyFilter>('all')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<RegisteredVersion | null>(null)
@@ -42,7 +45,7 @@ export function ModelRegistryPage() {
   // Impedir que descargas antiguas se muestren tras cambiar versión, filtro o proyecto.
   const loadGeneration = useRef(0)
   const filteredVersions = useMemo(() => versions.filter((item) => family === 'all' ||
-    (isRnnManifest(item.preprocessing_manifest) ? 'rnn' : isCnnManifest(item.preprocessing_manifest) ? 'cnn' : 'feedforward') === family), [versions, family])
+    (isGanManifest(item.preprocessing_manifest) ? 'gan' : isRnnManifest(item.preprocessing_manifest) ? 'rnn' : isCnnManifest(item.preprocessing_manifest) ? 'cnn' : 'feedforward') === family), [versions, family])
   const pageVersions = useMemo(() => filteredVersions.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE), [filteredVersions,page])
 
   useEffect(() => {
@@ -81,7 +84,9 @@ export function ModelRegistryPage() {
     predictor.current = null
     try {
       const bundle = await downloadModelVersion(version)
-      const restored = isRnnManifest(version.preprocessing_manifest)
+      const restored = isGanManifest(version.preprocessing_manifest)
+        ? await loadGanGenerator(bundle, version.preprocessing_manifest)
+        : isRnnManifest(version.preprocessing_manifest)
         ? await loadRnnPredictor(bundle, version.preprocessing_manifest)
         : isCnnManifest(version.preprocessing_manifest)
           ? await loadCnnPredictor(bundle, version.preprocessing_manifest)
@@ -105,13 +110,13 @@ export function ModelRegistryPage() {
     <Surface className="space-y-4 p-5 sm:p-7">
       <div className="flex items-center gap-2"><Database size={19} aria-hidden="true"/><h2 className="text-lg font-semibold">Versiones publicadas</h2></div>
       <p className="text-sm text-[var(--muted)]">Los Ingenieros publican versiones desde el entrenamiento finalizado. Los miembros autorizados pueden recuperarlas para predecir sin el CSV.</p>
-      <div className="max-w-xs"><SelectField id="registry-family" label="Familia de modelo" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }, { value: 'rnn', label: 'RNN' }]} onChange={(event) => { loadGeneration.current += 1; setFamily(event.target.value as FamilyFilter); setPage(1); setSelected(null); setBusy(false); predictor.current?.dispose(); predictor.current = null }}/></div>
+      <div className="max-w-xs"><SelectField id="registry-family" label="Familia de modelo" value={family} options={[{ value: 'all', label: 'Todas las familias' }, { value: 'feedforward', label: 'Feedforward' }, { value: 'cnn', label: 'CNN' }, { value: 'rnn', label: 'RNN' }, { value: 'gan', label: 'GAN' }]} onChange={(event) => { loadGeneration.current += 1; setFamily(event.target.value as RegistryFamilyFilter); setPage(1); setSelected(null); setBusy(false); predictor.current?.dispose(); predictor.current = null }}/></div>
       {filteredVersions.length === 0 ? <Notice>No hay versiones publicadas para este filtro.</Notice> : <div className="overflow-x-auto">
         <table className="w-full min-w-[630px] text-left text-sm">
           <thead><tr className="border-b border-[var(--line)] text-[var(--muted)]"><th className="p-3">Modelo</th><th className="p-3">Familia</th><th className="p-3">Versión</th><th className="p-3">Backend</th><th className="p-3">Fecha</th><th className="p-3">Acción</th></tr></thead>
           <tbody>{pageVersions.map((version) => <tr key={version.id} className="border-b border-[var(--line)] last:border-0">
             <td className="p-3 font-medium">{models.find((model) => model.id === version.model_id)?.name ?? 'Modelo'}</td>
-            <td className="p-3">{isRnnManifest(version.preprocessing_manifest) ? 'RNN' : isCnnManifest(version.preprocessing_manifest) ? 'CNN' : 'Feedforward'}</td>
+            <td className="p-3">{isGanManifest(version.preprocessing_manifest) ? 'GAN' : isRnnManifest(version.preprocessing_manifest) ? 'RNN' : isCnnManifest(version.preprocessing_manifest) ? 'CNN' : 'Feedforward'}</td>
             <td className="p-3 tabular-nums">v{version.version}</td>
             <td className="p-3">{version.backend.toUpperCase()}</td>
             <td className="p-3">{new Date(version.created_at).toLocaleString('es-PE')}</td>
@@ -127,11 +132,18 @@ export function ModelRegistryPage() {
     <ModelReviewsSection projectId={projectId} models={models} versions={versions} />
     {selected && <div className="space-y-4">
       <Notice tone="success"><ShieldCheck size={16} className="inline"/> Versión v{selected.version} cargada con integridad SHA-256 verificada. Los datos de entrada de predicción siguen siendo locales.</Notice>
-      {isRnnManifest(selected.preprocessing_manifest) ? <RnnRestoredPredictionCard key={selected.id}
+      {isGanManifest(selected.preprocessing_manifest) ? <GanRestoredGenerationCard key={selected.id}
+        dimension={selected.preprocessing_manifest.dimension}
+        generate={async (count) => {
+          const loaded = predictor.current
+          if (!loaded || !('generate' in loaded)) throw new Error('El generador GAN restaurado ya no está disponible.')
+          return loaded.generate(count)
+        }}/>
+      : isRnnManifest(selected.preprocessing_manifest) ? <RnnRestoredPredictionCard key={selected.id}
         manifest={selected.preprocessing_manifest}
         predict={async (window) => {
           const loaded = predictor.current
-          if (!loaded || !('manifest' in loaded)) throw new Error('La RNN restaurada no está disponible.')
+          if (!loaded || !('manifest' in loaded) || !('predict' in loaded)) throw new Error('La RNN restaurada no está disponible.')
           return loaded.predict(window)
         }}/>
       : isCnnManifest(selected.preprocessing_manifest) ? <CnnRestoredPredictionCard key={selected.id}

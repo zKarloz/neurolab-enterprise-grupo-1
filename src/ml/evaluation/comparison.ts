@@ -1,13 +1,16 @@
 import type { TestEvaluation } from './metrics.ts'
 import type { CnnStoredEvaluation } from './cnnStoredEvaluation.ts'
 import { isRnnStoredEvaluation, type RnnStoredEvaluation } from './rnnStoredEvaluation.ts'
+import { isGanStoredEvaluation, type GanStoredEvaluation } from './ganStoredEvaluation.ts'
 import type { EpochMetrics } from '../training/types.ts'
 
 export interface ComparisonRow { metric: string; first: number | null; second: number | null }
 
 /** Solo se comparan problemas del mismo tipo; nunca se inventan evaluaciones ausentes. */
-export function compareTestMetrics(first: TestEvaluation | CnnStoredEvaluation | RnnStoredEvaluation | null, second: TestEvaluation | CnnStoredEvaluation | RnnStoredEvaluation | null): ComparisonRow[] {
+export function compareTestMetrics(first: TestEvaluation | CnnStoredEvaluation | RnnStoredEvaluation | GanStoredEvaluation | null, second: TestEvaluation | CnnStoredEvaluation | RnnStoredEvaluation | GanStoredEvaluation | null): ComparisonRow[] {
   if (!first || !second) return []
+  // Las pérdidas adversariales y el resumen descriptivo nunca se comparan como métricas test.
+  if (isGanStoredEvaluation(first) || isGanStoredEvaluation(second)) return []
   if (first.problemType !== second.problemType) throw new Error('No se pueden comparar métricas de tipos de problema distintos.')
   // Los formatos RNN no son equivalentes a Feedforward/CNN aunque compartan tarea.
   if (isRnnStoredEvaluation(first) !== isRnnStoredEvaluation(second)) return []
