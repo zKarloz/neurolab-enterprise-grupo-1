@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Archive, ArchiveRestore, ArrowRight, FolderKanban, Plus, Search } from 'lucide-react'
+import { ArchiveRestore, ArrowRight, FolderKanban, Plus, Search } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { InputField } from '../../components/ui/InputField'
 import { Modal } from '../../components/ui/Modal'
@@ -58,7 +58,6 @@ export function ProjectsPage() {
   const shown = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   // El filtro sigue leyendo datos protegidos por RLS, incluso para proyectos archivados.
-  const archivedCount = projects.filter((project) => project.status === 'archived').length
   const platformAdmin = state.status === 'ready' && state.profile.is_platform_admin
   const canRestore = (project: Project) =>
     project.status === 'archived' && (platformAdmin || responsibleIds.includes(project.id))
@@ -100,12 +99,8 @@ export function ProjectsPage() {
           <h1 className="text-3xl font-semibold tracking-[-.04em]">Proyectos</h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted)]">Gestiona proyectos e integrantes autorizados. Los datos se recuperan desde Supabase.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" aria-pressed={filter === 'archived'} onClick={() => { setFilter('archived'); setSearch('') }}>
-            <Archive size={17} aria-hidden="true" /> Archivados ({archivedCount})
-          </Button>
-          {canCreate && <Button onClick={() => setCreateOpen(true)}><Plus size={17} aria-hidden="true" /> Nuevo proyecto</Button>}
-        </div>
+        {/* El selector Estado centraliza los filtros; evitamos un botón redundante. */}
+        {canCreate && <Button onClick={() => setCreateOpen(true)}><Plus size={17} aria-hidden="true" /> Nuevo proyecto</Button>}
       </header>
       <Surface className="p-4 sm:p-6">
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
